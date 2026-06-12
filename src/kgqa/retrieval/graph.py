@@ -35,26 +35,31 @@ _PARENT_AQL = """
 """
 
 # From the seed papers, hop across shared MeSH concepts to related papers.
+# Two-stage: rank neighbours by how many concepts they share with the seeds
+# (cheap), then reconstruct abstracts only for the top-N (avoids building an
+# abstract for every candidate on every query).
 _CONCEPT_AQL = """
     WITH Papers, Chunks, Concepts
     LET seeds = @paper_keys
-    FOR pkey IN seeds
-        LET paper = DOCUMENT(CONCAT("Papers/", pkey))
-        FILTER paper != null
-        FOR concept IN 1..1 OUTBOUND paper @@mentions
-            FOR neighbour IN 1..1 INBOUND concept @@mentions
-                FILTER neighbour._key NOT IN seeds
-                LET sections = (
-                    FOR c IN 1..1 OUTBOUND neighbour @@has_context
-                        SORT c._key
-                        RETURN c.text
-                )
-                COLLECT npaper = neighbour._key,
-                        abstract = CONCAT_SEPARATOR(" ", sections)
-                        WITH COUNT INTO shared
-                SORT shared DESC
-                LIMIT @limit
-                RETURN { paper: npaper, abstract: abstract, shared: shared }
+    LET ranked = (
+        FOR pkey IN seeds
+            LET paper = DOCUMENT(CONCAT("Papers/", pkey))
+            FILTER paper != null
+            FOR concept IN 1..1 OUTBOUND paper @@mentions
+                FOR neighbour IN 1..1 INBOUND concept @@mentions
+                    FILTER neighbour._key NOT IN seeds
+                    COLLECT nkey = neighbour._key WITH COUNT INTO shared
+                    SORT shared DESC
+                    LIMIT @limit
+                    RETURN { nkey: nkey, shared: shared }
+    )
+    FOR n IN ranked
+        LET sections = (
+            FOR c IN 1..1 OUTBOUND DOCUMENT(CONCAT("Papers/", n.nkey)) @@has_context
+                SORT c._key
+                RETURN c.text
+        )
+        RETURN { paper: n.nkey, abstract: CONCAT_SEPARATOR(" ", sections), shared: n.shared }
 """
 
 
