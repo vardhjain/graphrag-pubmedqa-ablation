@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import requests
 
-from .config import LLM_MODEL, LLM_NUM_CTX, LLM_TEMPERATURE, LLM_TIMEOUT, OLLAMA_API
+from .config import (
+    LLM_KEEP_ALIVE,
+    LLM_MODEL,
+    LLM_NUM_CTX,
+    LLM_NUM_PREDICT,
+    LLM_TEMPERATURE,
+    LLM_TIMEOUT,
+    OLLAMA_API,
+)
 
 
 def call_ollama(
@@ -24,7 +32,12 @@ def call_ollama(
         "model": model,
         "messages": messages,
         "stream": False,
-        "options": {"temperature": temperature, "num_ctx": LLM_NUM_CTX},
+        "keep_alive": LLM_KEEP_ALIVE,  # keep the model resident across the run
+        "options": {
+            "temperature": temperature,
+            "num_ctx": LLM_NUM_CTX,
+            "num_predict": LLM_NUM_PREDICT,  # cap generation so a call can't run away
+        },
     }
     resp = requests.post(api_url, json=payload, timeout=LLM_TIMEOUT)
     resp.raise_for_status()
