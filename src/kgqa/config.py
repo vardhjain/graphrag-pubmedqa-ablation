@@ -39,8 +39,14 @@ UNLABELED_CONFIG = "pqa_unlabeled"
 # ── LLM serving ───────────────────────────────────────────────────────────────
 OLLAMA_API = os.environ.get("OLLAMA_API", "http://localhost:11434/api/chat")
 LLM_TEMPERATURE = 0.0  # deterministic for benchmarking
-LLM_NUM_CTX = 4096
-LLM_TIMEOUT = 300
+# Env-tunable so the run can be sized to the GPU without code changes. num_predict
+# caps generation so a runaway reasoning chain can't stall (or crash) the server;
+# the answer extractor tolerates a truncated chain. Lower NUM_CTX to 4096 on a
+# small-VRAM GPU (e.g. T4) if you hit out-of-memory 500s.
+LLM_NUM_CTX = int(os.environ.get("LLM_NUM_CTX", "4096"))
+LLM_NUM_PREDICT = int(os.environ.get("LLM_NUM_PREDICT", "1024"))
+LLM_KEEP_ALIVE = os.environ.get("LLM_KEEP_ALIVE", "30m")
+LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "180"))
 
 # ── Graph schema (must match scripts/ingest.py) ───────────────────────────────
 NODE_COLLECTIONS = ("Papers", "Chunks", "Concepts")
