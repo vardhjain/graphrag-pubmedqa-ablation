@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Testing & linting (CI)
+pytest>=8.0
+ruff>=0.4.0

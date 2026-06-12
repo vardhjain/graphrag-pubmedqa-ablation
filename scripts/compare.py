@@ -1,0 +1,143 @@
+"""Aggregate arm results: summary table, McNemar tests, and figures.
+
+    python scripts/compare.py
+
+Reads results/{arm}_results.json for whichever arms are present and writes
+figures + a markdown snippet to results/. The McNemar tests are paired on pubid,
+so they only run for arms evaluated on the same seeded sample.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "src"))
+
+from kgqa.evaluation import mcnemar_test  # noqa: E402
+
+RESULTS_DIR = os.path.join(ROOT, "results")
+ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts"]
+# Adjacent-arm contrasts that isolate each component's contribution.
+CONTRASTS = [
+    ("plain", "plain_rr", "reranker effect"),
+    ("plain_rr", "graph", "parent-expansion effect"),
+    ("graph", "graph_concepts", "concept-hop effect"),
+]
+
+
+def load_results():
+    out = {}
+    for arm in ARM_ORDER:
+        path = os.path.join(RESULTS_DIR, f"{arm}_results.json")
+        if os.path.exists(path):
+            with open(path) as f:
+                out[arm] = json.load(f)
+    return out
+
+
+def aligned(a, b):
+    """Align two arms' predictions on shared pubids (same seed -> same order)."""
+    ids_a = a.get("ids") or list(range(len(a["y_pred"])))
+    ids_b = b.get("ids") or list(range(len(b["y_pred"])))
+    idx_b = {sid: i for i, sid in enumerate(ids_b)}
+    gt, pa, pb = [], [], []
+    for i, sid in enumerate(ids_a):
+        j = idx_b.get(sid)
+        if j is None:
+            continue
+        gt.append(a["y_true"][i])
+        pa.append(a["y_pred"][i])
+        pb.append(b["y_pred"][j])
+    return gt, pa, pb
+
+
+def main():
+    results = load_results()
+    if not results:
+        print(f"No results found in {RESULTS_DIR}. Run scripts/run_benchmark.py first.")
+        sys.exit(1)
+
+    lines = ["| Arm | Accuracy | Macro F1 | Avg latency (s) | n |",
+             "| --- | --- | --- | --- | --- |"]
+    print("\n" + "=" * 64)
+    print("  RESULTS SUMMARY")
+    print("=" * 64)
+    for arm in ARM_ORDER:
+        if arm not in results:
+            continue
+        r = results[arm]
+        acc, f1 = r["accuracy"] * 100, r.get("macro_f1", 0) * 100
+        lat, n = r["avg_latency"], r["samples"]
+        print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  lat={lat:5.1f}s  n={n}")
+        lines.append(f"| {arm} | {acc:.2f}% | {f1:.2f}% | {lat:.1f} | {n} |")
+
+    print("\n" + "=" * 64)
+    print("  PAIRED McNEMAR TESTS (adjacent ablation contrasts)")
+    print("=" * 64)
+    lines += ["", "### Significance (paired McNemar)", "",
+              "| Contrast | Δacc (pp) | gains | losses | p | sig? |",
+              "| --- | --- | --- | --- | --- | --- |"]
+    for a_name, b_name, desc in CONTRASTS:
+        if a_name not in results or b_name not in results:
+            continue
+        gt, pa, pb = aligned(results[a_name], results[b_name])
+        if not gt:
+            continue
+        test = mcnemar_test(gt, pa, pb)
+        acc_a = sum(p == g for p, g in zip(pa, gt, strict=False)) / len(gt)
+        acc_b = sum(p == g for p, g in zip(pb, gt, strict=False)) / len(gt)
+        d = (acc_b - acc_a) * 100
+        sig = "yes" if test["significant_at_0.05"] else "no"
+        print(f"  {a_name} -> {b_name}  ({desc})")
+        print(f"      Δacc={d:+.2f}pp  gains={test['b_gains']}  losses={test['c_losses']}"
+              f"  p={test['p_value']:.4f}  sig={sig}")
+        lines.append(f"| {a_name} → {b_name} ({desc}) | {d:+.2f} | {test['b_gains']} "
+                     f"| {test['c_losses']} | {test['p_value']:.4f} | {sig} |")
+
+    md_path = os.path.join(RESULTS_DIR, "summary.md")
+    with open(md_path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    print(f"\nWrote {md_path}")
+
+    _plot(results)
+
+
+def _plot(results):
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception as exc:  # pragma: no cover
+        print(f"(skipping figures: {exc})")
+        return
+
+    arms = [a for a in ARM_ORDER if a in results]
+    accs = [results[a]["accuracy"] * 100 for a in arms]
+    f1s = [results[a].get("macro_f1", 0) * 100 for a in arms]
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    import numpy as np
+    x = np.arange(len(arms))
+    w = 0.38
+    ax.bar(x - w / 2, accs, w, label="Accuracy", color="#2196F3")
+    ax.bar(x + w / 2, f1s, w, label="Macro F1", color="#FF9800")
+    ax.set_xticks(x)
+    ax.set_xticklabels(arms, rotation=15)
+    ax.set_ylabel("%")
+    ax.set_ylim(0, 100)
+    ax.set_title("4-arm ablation — PubMedQA")
+    ax.legend()
+    for i, (a, f) in enumerate(zip(accs, f1s, strict=False)):
+        ax.text(i - w / 2, a + 1, f"{a:.1f}", ha="center", fontsize=8)
+        ax.text(i + w / 2, f + 1, f"{f:.1f}", ha="center", fontsize=8)
+    fig.tight_layout()
+    out = os.path.join(RESULTS_DIR, "ablation.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"Wrote {out}")
+
+
+if __name__ == "__main__":
+    main()
