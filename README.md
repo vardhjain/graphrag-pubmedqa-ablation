@@ -37,11 +37,12 @@ six issues; all are fixed in this revamp:
 | 5 | `Concepts` (MeSH) and `MENTIONS` edges were built but **never used** | The `graph_concepts` arm hops across shared MeSH concepts to pull in related papers |
 | 6 | `NameError` in the graph fallback; first-100 samples, no seed, no significance test | Fixed fallback; seeded random sample (default n=200); paired McNemar test |
 
-**Honest expectation.** PubMedQA is mostly single-abstract QA, so a fair
-parent-expansion gain may be modest. The interesting signal is in the
-`graph_concepts` arm and in multi-evidence questions — that is where a graph can
-legitimately beat plain retrieval. The point of this repo is to measure that
-honestly, not to manufacture a win.
+**What we expected vs. what we found.** Going in, we expected concept-hop
+expansion to be where the graph shines and a plain parent-expansion gain to be
+modest. The data said the opposite: the decisive, statistically significant win
+came from **parent-document expansion**, while concept-hop did not help on this
+single-abstract dataset. We report that honestly rather than bury it — see
+[Results](#results).
 
 ---
 
@@ -117,18 +118,49 @@ On Colab, run [`notebooks/01_ingest.ipynb`](notebooks/01_ingest.ipynb) once, the
 
 ## Results
 
-> ⏳ **Pending the Colab benchmark run.** `scripts/compare.py` regenerates the
-> table below into `results/summary.md` and `results/ablation.png`.
+Seeded random sample of **n = 200** PubMedQA `pqa_labeled` questions (seed 42,
+identical across arms), `deepseek-r1:8b` via Ollama on an A100. Regenerate with
+`scripts/compare.py` (writes `results/summary.md` and `results/ablation.png`).
 
-| Arm | Accuracy | Macro F1 | What it isolates |
-| --- | --- | --- | --- |
-| `plain` | — | — | baseline RAG |
-| `plain_rr` | — | — | + reranker |
-| `graph` | — | — | + parent-paper expansion |
-| `graph_concepts` | — | — | + MeSH concept hop |
+| Arm | Accuracy | Macro F1 | Avg latency | Adds |
+| --- | --- | --- | --- | --- |
+| `plain` | 30.0% | 29.7% | 6.4 s | baseline chunk RAG |
+| `plain_rr` | 37.0% | 35.2% | 6.6 s | + cross-encoder reranker |
+| **`graph`** | **59.5%** | **50.5%** | 7.5 s | + parent-paper expansion |
+| `graph_concepts` | 57.5% | 50.0% | 40.8 s | + MeSH concept hop |
 
-Paired McNemar tests (reranker effect, parent-expansion effect, concept-hop
-effect) are written alongside the table.
+**Paired McNemar tests** — each contrast isolates one component on the same 200 questions:
+
+| Contrast | Δ accuracy | gains / losses | p | significant? |
+| --- | --- | --- | --- | --- |
+| `plain → plain_rr` (reranker) | +7.0 pp | 35 / 21 | 0.081 | no |
+| `plain_rr → graph` (parent expansion) | **+22.5 pp** | 71 / 26 | **<0.0001** | **yes** |
+| `graph → graph_concepts` (concept hop) | −2.0 pp | 26 / 30 | 0.69 | no |
+
+![4-arm ablation on PubMedQA](results/ablation.png)
+
+### What the ablation shows
+
+1. **The graph's decisive win is parent-document expansion** (+22.5 pp,
+   p < 0.0001). Retrieving at the fine-grained chunk level but feeding the LLM the
+   *full reconstructed abstract* (chunk → paper → all sections, via `HAS_CONTEXT`)
+   is what moves the needle — for only ~1 s over `plain_rr`. With the label
+   leakage fixed, this is a clean, legitimate graph advantage.
+2. **Single-fragment retrieval is not enough for PubMedQA.** `plain` and
+   `plain_rr` land *below* the majority-class baseline (PubMedQA is ≈55% "yes"); a
+   lone ~250-character section rarely contains enough to judge the question.
+   Context sufficiency — which the graph supplies — is the dominant factor, and
+   `graph` is the only arm that clears the trivial baseline.
+3. **The reranker helps modestly but not significantly** at this sample size
+   (+7 pp, p = 0.08).
+4. **Concept-hop expansion does not help here** (−2 pp, p = 0.69) and costs ~5×
+   the latency. An honest — and expected — negative result: on single-abstract QA,
+   papers pulled in via shared MeSH terms act mostly as distractors. The graph
+   helps by *deepening* context (the full document), not by *broadening* it
+   (related documents).
+
+The macro-F1 / accuracy gap on the graph arms reflects weak recall on the rare
+`maybe` class (~11% of the data) — a dataset property, not a retrieval one.
 
 ---
 
