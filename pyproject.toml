@@ -9,6 +9,24 @@ description = "Fair GraphRAG vs PlainRAG comparison on PubMedQA"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "Vardh Jain", email = "vardhjain20@gmail.com" }]
+keywords = ["graphrag", "rag", "knowledge-graph", "pubmedqa", "arangodb", "llm", "ablation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/vardhjain/Knowledge_Graph_Question_Answering"
+Repository = "https://github.com/vardhjain/Knowledge_Graph_Question_Answering"
+Issues = "https://github.com/vardhjain/Knowledge_Graph_Question_Answering/issues"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.4.0", "pre-commit>=3.5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

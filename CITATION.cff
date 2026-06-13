@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "Knowledge Graph Question Answering: a fair GraphRAG vs PlainRAG comparison"
+message: "If you use this software or its findings, please cite it as below."
+type: software
+authors:
+  - given-names: Vardh
+    family-names: Jain
+    email: vardhjain20@gmail.com
+repository-code: "https://github.com/vardhjain/Knowledge_Graph_Question_Answering"
+abstract: >-
+  A controlled 4-arm ablation (plain, plain_rr, graph, graph_concepts) on
+  PubMedQA that isolates what a knowledge graph contributes to retrieval-augmented
+  question answering, holding corpus, chunking, embedder, reranker, prompt, LLM,
+  and top-k constant. Includes a paired McNemar significance test and a
+  leakage-free ArangoDB graph schema.
+keywords:
+  - graphrag
+  - retrieval-augmented-generation
+  - knowledge-graph
+  - pubmedqa
+  - arangodb
+  - ablation-study
+license: MIT
+version: 1.0.0
+date-released: "2026-06-12"

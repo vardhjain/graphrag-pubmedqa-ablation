@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="900" height="560" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
+
+  <text x="40" y="40" font-size="22" font-weight="700" fill="#0f172a">Knowledge Graph QA — fair 4-arm ablation</text>
+  <text x="40" y="64" font-size="13" fill="#64748b">Every layer is held constant; only the retrieval strategy changes.</text>
+
+  <!-- Shared backbone -->
+  <g text-anchor="middle" font-size="13" fill="#1e293b">
+    <rect x="40" y="88" width="260" height="44" rx="9" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="170" y="115" font-weight="600">PubMedQA question</text>
+
+    <rect x="40" y="156" width="260" height="44" rx="9" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="170" y="183" font-weight="600">Encode · all-MiniLM-L6-v2</text>
+
+    <rect x="40" y="224" width="260" height="48" rx="9" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="170" y="246" font-weight="600">Vector search · ChunkStore</text>
+    <text x="170" y="263" font-size="11" fill="#64748b">206,613 chunks · ArangoDB</text>
+
+    <rect x="40" y="296" width="260" height="48" rx="9" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <text x="170" y="318" font-weight="600">Cross-encoder rerank</text>
+    <text x="170" y="335" font-size="11" fill="#64748b">rerank arms only</text>
+
+    <rect x="40" y="368" width="260" height="48" rx="9" fill="#fff7ed" stroke="#f59e0b" stroke-width="2"/>
+    <text x="170" y="390" font-weight="700" fill="#b45309">Context assembly</text>
+    <text x="170" y="407" font-size="11" fill="#b45309">← the only thing that differs</text>
+
+    <rect x="40" y="440" width="260" height="44" rx="9" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="170" y="467" font-weight="600">LLM · deepseek-r1:8b (Ollama)</text>
+
+    <rect x="40" y="508" width="260" height="40" rx="9" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="170" y="533" font-weight="600">Extract yes/no/maybe → McNemar</text>
+  </g>
+
+  <!-- Backbone arrows -->
+  <g stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arrow)">
+    <line x1="170" y1="132" x2="170" y2="154"/>
+    <line x1="170" y1="200" x2="170" y2="222"/>
+    <line x1="170" y1="272" x2="170" y2="294"/>
+    <line x1="170" y1="344" x2="170" y2="366"/>
+    <line x1="170" y1="416" x2="170" y2="438"/>
+    <line x1="170" y1="484" x2="170" y2="506"/>
+  </g>
+
+  <!-- Connector to arms panel -->
+  <path d="M300,392 C330,392 330,300 360,300" fill="none" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- Arms panel -->
+  <rect x="360" y="250" width="500" height="232" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="384" y="282" font-size="14" font-weight="700" fill="#0f172a">The four arms (accuracy, n=200)</text>
+
+  <!-- winner highlight -->
+  <rect x="372" y="356" width="476" height="34" rx="7" fill="#ecfdf5" stroke="#10b981" stroke-width="1.5"/>
+
+  <g font-size="13">
+    <text x="384" y="318" font-weight="700" fill="#2563eb">plain</text>
+    <text x="470" y="318" fill="#475569">raw top-k chunks</text>
+    <text x="836" y="318" text-anchor="end" font-weight="700" fill="#64748b">30.0%</text>
+
+    <text x="384" y="345" font-weight="700" fill="#2563eb">plain_rr</text>
+    <text x="470" y="345" fill="#475569">+ cross-encoder reranker</text>
+    <text x="836" y="345" text-anchor="end" font-weight="700" fill="#64748b">37.0%</text>
+
+    <text x="384" y="378" font-weight="700" fill="#047857">graph ★</text>
+    <text x="470" y="378" fill="#475569">+ parent abstracts (HAS_CONTEXT)</text>
+    <text x="836" y="378" text-anchor="end" font-weight="800" fill="#047857">59.5%</text>
+
+    <text x="384" y="411" font-weight="700" fill="#2563eb">graph_concepts</text>
+    <text x="470" y="411" fill="#475569">+ concept hop (MENTIONS)</text>
+    <text x="836" y="411" text-anchor="end" font-weight="700" fill="#64748b">57.5%</text>
+  </g>
+
+  <line x1="384" y1="430" x2="836" y2="430" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="384" y="455" font-size="12.5" font-weight="600" fill="#047857">Parent-document expansion: +22.5 pp over plain_rr</text>
+  <text x="384" y="472" font-size="11.5" fill="#64748b">paired McNemar p &lt; 0.0001 · concept hop did not help (−2 pp, n.s.)</text>
+</svg>

@@ -1,5 +1,10 @@
 # Knowledge Graph Question Answering — GraphRAG vs PlainRAG, done fairly
 
+[![CI](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml/badge.svg)](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+
 A controlled study of **what a knowledge graph actually contributes** to
 retrieval-augmented question answering on biomedical literature
 ([PubMedQA](https://pubmedqa.github.io/)).
@@ -20,6 +25,8 @@ Same corpus, same chunking, same embedder, same reranker, same prompt, same LLM,
 same seeded sample, same top-k. The accuracy delta between adjacent arms is
 attributable to exactly one component, and we report a **paired McNemar test** so
 you can tell a real effect from noise.
+
+![Architecture and 4-arm ablation](assets/architecture.svg)
 
 ---
 
@@ -167,13 +174,28 @@ The macro-F1 / accuracy gap on the graph arms reflects weak recall on the rare
 ## Development
 
 ```bash
-pytest                 # 17 tests, all CPU, no external services
-ruff check src scripts tests
+make install-dev    # deps for tests + lint
+make test           # pytest — 17 tests, all CPU, no external services
+make lint           # ruff
+make help           # all shortcuts (ingest, benchmark, compare, ...)
 ```
 
 CI runs ruff + pytest on every push/PR (Python 3.10 and 3.11). Unit tests inject
 fakes for the encoder, reranker, and ArangoDB, so the heavy ML dependencies are
-never needed just to verify the logic.
+never needed just to verify the logic. Optionally `pre-commit install` to run
+ruff automatically on each commit.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the
+project layout, and the fairness ground rules. Changes are tracked in
+[CHANGELOG.md](CHANGELOG.md); please be kind and follow the
+[Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Citing
+
+If this project or its findings are useful in your work, please cite it — see
+[CITATION.cff](CITATION.cff) (GitHub renders a "Cite this repository" button).
 
 ## License
 

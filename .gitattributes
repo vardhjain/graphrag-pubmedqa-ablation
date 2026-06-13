@@ -1,0 +1,18 @@
+# Normalize line endings: LF in the repository and on checkout, everywhere.
+* text=auto eol=lf
+
+# Must be LF to run on Unix (Makefile is also tab-sensitive).
+Makefile text eol=lf
+*.sh text eol=lf
+
+# Binary assets — no EOL conversion, no diff noise.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.pptx binary
+*.pkl binary
+*.bin binary
+
+# Thin Colab wrappers are documentation, not core source — keep them out of the
+# language breakdown so the repo reads as the Python project it is.
+*.ipynb linguist-documentation
