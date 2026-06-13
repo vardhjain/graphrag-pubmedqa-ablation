@@ -131,6 +131,27 @@ once, then [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb) (set
 
 ---
 
+## Interactive demo & dashboard
+
+Two optional front-ends (`pip install -r requirements-app.txt`):
+
+- **Chat demo** (Gradio) — ask a question and get a graph-grounded answer that
+  cites PubMed IDs, using the winning `graph` arm. Live demo, so it needs
+  ArangoDB + Ollama running:
+  ```bash
+  make chat            # or: python app/chat_app.py --share
+  ```
+- **Results dashboard** (Streamlit) — the 4-arm ablation, McNemar tests, and
+  per-class breakdown. Reads `results/` only (no LLM or DB), so it deploys to
+  Streamlit Cloud as a click-to-view link:
+  ```bash
+  make dashboard       # or: streamlit run app/dashboard.py
+  ```
+
+See [app/README.md](app/README.md) for deployment notes.
+
+---
+
 ## Results
 
 Seeded random sample of **n = 200** PubMedQA `pqa_labeled` questions (seed 42,

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install install-dev test lint format ingest benchmark compare clean
+.PHONY: help install install-dev install-app test lint format ingest benchmark compare chat dashboard clean
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -11,14 +11,17 @@ install:  ## Install runtime dependencies
 install-dev:  ## Install dev dependencies (tests + lint)
 	pip install -r requirements-dev.txt
 
+install-app:  ## Install UI dependencies (gradio + streamlit)
+	pip install -r requirements-app.txt
+
 test:  ## Run the test suite
 	pytest
 
 lint:  ## Lint with ruff
-	ruff check src scripts tests
+	ruff check src scripts tests app
 
 format:  ## Auto-fix lint issues with ruff
-	ruff check --fix src scripts tests
+	ruff check --fix src scripts tests app
 
 ingest:  ## Build the ArangoDB knowledge graph (needs ARANGO_PASS)
 	python scripts/ingest.py
@@ -31,6 +34,12 @@ benchmark:  ## Run all four arms (needs ARANGO_PASS + Ollama)
 
 compare:  ## Aggregate results into table, McNemar tests, and figure
 	python scripts/compare.py
+
+chat:  ## Launch the Gradio chat demo (needs ArangoDB + Ollama)
+	python app/chat_app.py
+
+dashboard:  ## Launch the Streamlit results dashboard
+	streamlit run app/dashboard.py
 
 clean:  ## Remove caches and generated vector cache
 	rm -rf .pytest_cache .ruff_cache *.egg-info src/*.egg-info \

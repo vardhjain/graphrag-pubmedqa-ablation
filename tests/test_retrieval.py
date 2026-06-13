@@ -86,3 +86,16 @@ def test_graph_degrades_to_raw_chunks_on_db_error(fake_encoder, fake_reranker):
     ctx = r.retrieve("aspirin heart attack")
     assert "=== STUDY 1 ===" in ctx
     assert "aspirin" in ctx
+
+
+def test_chat_returns_answer_and_source_pubids(fake_encoder, fake_reranker, monkeypatch):
+    import kgqa.retrieval.base as base
+    monkeypatch.setattr(base, "call_ollama",
+                        lambda *a, **k: "<think>reasoning</think> Yes, it does.")
+    store = make_store(fake_encoder)
+    db = FakeDB(abstracts={"1": "FULL ABS 1: aspirin", "2": "x", "3": "y"})
+    r = GraphRetriever(store, fake_encoder, db, reranker=fake_reranker, top_k_final=1)
+    out = r.chat("does aspirin reduce heart attack risk")
+    assert set(out) >= {"answer", "sources", "context"}
+    assert out["sources"] == ["1"]          # the retrieved paper's pubid
+    assert "Yes" in out["answer"]

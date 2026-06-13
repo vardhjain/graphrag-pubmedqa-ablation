@@ -16,15 +16,22 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
+from kgqa.config import DATASET_NAME, LLM_MODEL, RANDOM_SEED  # noqa: E402
 from kgqa.evaluation import mcnemar_test  # noqa: E402
 
 RESULTS_DIR = os.path.join(ROOT, "results")
 ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts"]
+ARM_ADDS = {
+    "plain": "baseline chunk RAG",
+    "plain_rr": "+ cross-encoder reranker",
+    "graph": "+ parent-paper expansion",
+    "graph_concepts": "+ MeSH concept hop",
+}
 # Adjacent-arm contrasts that isolate each component's contribution.
 CONTRASTS = [
-    ("plain", "plain_rr", "reranker effect"),
-    ("plain_rr", "graph", "parent-expansion effect"),
-    ("graph", "graph_concepts", "concept-hop effect"),
+    ("plain", "plain_rr", "reranker"),
+    ("plain_rr", "graph", "parent expansion"),
+    ("graph", "graph_concepts", "concept hop"),
 ]
 
 
@@ -62,6 +69,7 @@ def main():
 
     lines = ["| Arm | Accuracy | Macro F1 | Avg latency (s) | n |",
              "| --- | --- | --- | --- | --- |"]
+    arms_json, contrasts_json, max_n = [], [], 0
     print("\n" + "=" * 64)
     print("  RESULTS SUMMARY")
     print("=" * 64)
@@ -71,8 +79,12 @@ def main():
         r = results[arm]
         acc, f1 = r["accuracy"] * 100, r.get("macro_f1", 0) * 100
         lat, n = r["avg_latency"], r["samples"]
+        max_n = max(max_n, n)
         print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  lat={lat:5.1f}s  n={n}")
         lines.append(f"| {arm} | {acc:.2f}% | {f1:.2f}% | {lat:.1f} | {n} |")
+        arms_json.append({"arm": arm, "accuracy": round(acc, 2), "macro_f1": round(f1, 2),
+                          "avg_latency": round(lat, 1), "samples": n,
+                          "adds": ARM_ADDS.get(arm, "")})
 
     print("\n" + "=" * 64)
     print("  PAIRED McNEMAR TESTS (adjacent ablation contrasts)")
@@ -96,11 +108,24 @@ def main():
               f"  p={test['p_value']:.4f}  sig={sig}")
         lines.append(f"| {a_name} → {b_name} ({desc}) | {d:+.2f} | {test['b_gains']} "
                      f"| {test['c_losses']} | {test['p_value']:.4f} | {sig} |")
+        contrasts_json.append({"from": a_name, "to": b_name, "effect": desc,
+                               "delta_acc": round(d, 2), "gains": test["b_gains"],
+                               "losses": test["c_losses"],
+                               "p_value": round(test["p_value"], 4),
+                               "significant": test["significant_at_0.05"]})
 
     md_path = os.path.join(RESULTS_DIR, "summary.md")
     with open(md_path, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"\nWrote {md_path}")
+
+    json_path = os.path.join(RESULTS_DIR, "summary.json")
+    with open(json_path, "w") as f:
+        json.dump({"n": max_n, "seed": RANDOM_SEED, "model": LLM_MODEL,
+                   "dataset": "PubMedQA (pqa_labeled)" if "PubMedQA" in DATASET_NAME
+                   else DATASET_NAME,
+                   "arms": arms_json, "contrasts": contrasts_json}, f, indent=2)
+    print(f"Wrote {json_path}")
 
     _plot(results)
 

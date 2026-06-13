@@ -28,7 +28,7 @@ jobs:
           python -m pip install numpy scikit-learn scipy requests pytest ruff
 
       - name: Lint (ruff)
-        run: ruff check src scripts tests
+        run: ruff check src scripts tests app
 
       - name: Test (pytest)
         run: pytest

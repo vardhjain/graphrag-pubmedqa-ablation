@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Interactive UIs** in `app/`: a Gradio chat demo (`chat_app.py`) over the
+  winning `graph` arm that cites source PubMed IDs, and a Streamlit results
+  dashboard (`dashboard.py`) that visualizes the ablation, McNemar tests, and
+  per-class breakdown. `requirements-app.txt`, `make chat` / `make dashboard`.
+- `BaseRetriever.chat()` — conversational answer plus the retrieved source pubids.
+- `scripts/compare.py` now also writes `results/summary.json` (structured metrics
+  + contrasts) for the dashboard.
+
 ## [1.0.0] — 2026-06-12
 
 The "fair comparison" revamp: turned a confounded notebook demo into a

@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Interactive UIs (app/)
+gradio>=4.0        # app/chat_app.py — live GraphRAG chat demo
+streamlit>=1.30    # app/dashboard.py — benchmark results dashboard

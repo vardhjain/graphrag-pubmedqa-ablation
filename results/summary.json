@@ -1,0 +1,17 @@
+{
+  "n": 200,
+  "seed": 42,
+  "model": "deepseek-r1:8b",
+  "dataset": "PubMedQA (pqa_labeled)",
+  "arms": [
+    {"arm": "plain",          "accuracy": 30.0, "macro_f1": 29.69, "avg_latency": 6.4,  "samples": 200, "adds": "baseline chunk RAG"},
+    {"arm": "plain_rr",       "accuracy": 37.0, "macro_f1": 35.21, "avg_latency": 6.6,  "samples": 200, "adds": "+ cross-encoder reranker"},
+    {"arm": "graph",          "accuracy": 59.5, "macro_f1": 50.51, "avg_latency": 7.5,  "samples": 200, "adds": "+ parent-paper expansion"},
+    {"arm": "graph_concepts", "accuracy": 57.5, "macro_f1": 49.97, "avg_latency": 40.8, "samples": 200, "adds": "+ MeSH concept hop"}
+  ],
+  "contrasts": [
+    {"from": "plain",    "to": "plain_rr",       "effect": "reranker",         "delta_acc": 7.0,  "gains": 35, "losses": 21, "p_value": 0.0814, "significant": false},
+    {"from": "plain_rr", "to": "graph",          "effect": "parent expansion", "delta_acc": 22.5, "gains": 71, "losses": 26, "p_value": 0.0000, "significant": true},
+    {"from": "graph",    "to": "graph_concepts", "effect": "concept hop",      "delta_acc": -2.0, "gains": 26, "losses": 30, "p_value": 0.6889, "significant": false}
+  ]
+}

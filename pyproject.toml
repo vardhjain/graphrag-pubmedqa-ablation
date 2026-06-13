@@ -38,7 +38,7 @@ addopts = "-q"
 
 [tool.ruff]
 line-length = 100
-src = ["src", "scripts", "tests"]
+src = ["src", "scripts", "tests", "app"]
 target-version = "py310"
 
 [tool.ruff.lint]
@@ -47,3 +47,4 @@ ignore = ["E501"]  # line length handled by formatter; long AQL strings are fine
 
 [tool.ruff.lint.per-file-ignores]
 "scripts/*" = ["E402"]  # sys.path insert before imports is intentional
+"app/*" = ["E402"]      # same: sys.path setup precedes imports

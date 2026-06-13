@@ -16,7 +16,7 @@ import numpy as np
 
 from ..config import TOP_K_CANDIDATES, TOP_K_FINAL
 from ..llm import call_ollama
-from ..prompts import BENCHMARK_SYSTEM_PROMPT, build_prompt
+from ..prompts import BENCHMARK_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, build_prompt
 
 
 @dataclass
@@ -166,3 +166,16 @@ class BaseRetriever(ABC):
         context = self.retrieve(question)
         return call_ollama(build_prompt(context, question),
                            system=BENCHMARK_SYSTEM_PROMPT)
+
+    def chat(self, question: str, temperature: float = 0.3) -> dict:
+        """Conversational answer plus the source paper pubids it retrieved.
+
+        Runs retrieval once and returns the cited papers (their PubMedQA pubids,
+        which are real PubMed IDs) so a UI can link back to the sources.
+        """
+        candidates = self._select(question)
+        context = self._build_context(question, candidates)
+        answer = call_ollama(build_prompt(context, question),
+                             system=CHAT_SYSTEM_PROMPT, temperature=temperature)
+        sources = list(dict.fromkeys(c.paper_key for c in candidates))
+        return {"answer": answer, "sources": sources, "context": context}
