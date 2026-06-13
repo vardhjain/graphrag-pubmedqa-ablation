@@ -14,6 +14,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `BaseRetriever.chat()` — conversational answer plus the retrieved source pubids.
 - `scripts/compare.py` now also writes `results/summary.json` (structured metrics
   + contrasts) for the dashboard.
+- One-click **Streamlit Community Cloud** deploy for the dashboard: a light
+  `app/requirements.txt` (picked up before the heavy root file), a themed
+  `.streamlit/config.toml`, a richer page config, and a README live-demo badge.
 
 ## [1.0.0] — 2026-06-12
 

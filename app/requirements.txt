@@ -1,0 +1,14 @@
+# Streamlit Community Cloud deploy dependencies for app/dashboard.py ONLY.
+#
+# This file lives next to the entrypoint on purpose: Community Cloud searches the
+# entrypoint's directory FIRST, so this light file is used and the heavy root
+# requirements.txt (torch, sentence-transformers, datasets, python-arango) is
+# never installed for the hosted dashboard. Keep the deploy's "Main file path"
+# set to app/dashboard.py.
+#
+# Also handy locally — `pip install -r app/requirements.txt` runs just the
+# dashboard. It needs streamlit + pandas (+ scikit-learn, used lazily for the
+# per-class confusion matrices when results/{arm}_results.json files are present).
+streamlit>=1.30
+pandas>=2.0
+scikit-learn>=1.3

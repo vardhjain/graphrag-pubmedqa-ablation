@@ -1,0 +1,11 @@
+# Theme for the Streamlit dashboard (app/dashboard.py). Read by `streamlit run`
+# locally and by Streamlit Community Cloud. Only long-stable keys are used so it
+# renders correctly on any recent Streamlit version. Palette matches the
+# matplotlib figure in results/ablation.png (blue primary).
+[theme]
+base = "light"
+primaryColor = "#2196F3"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F5F7FA"
+textColor = "#1A2027"
+font = "sans serif"

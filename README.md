@@ -4,6 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://kgqa-ablation.streamlit.app)
 
 A controlled study of **what a knowledge graph actually contributes** to
 retrieval-augmented question answering on biomedical literature
@@ -131,24 +132,32 @@ once, then [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb) (set
 
 ---
 
-## Interactive demo & dashboard
+## Live demo
 
-Two optional front-ends (`pip install -r requirements-app.txt`):
+**[▶ Open the results dashboard](https://kgqa-ablation.streamlit.app)** — an
+interactive Streamlit dashboard of the 4-arm ablation: headline accuracy, the
+paired McNemar significance tests, latency, and (when raw results are present)
+per-class confusion matrices. No setup, no login — it reads the committed
+`results/` artifacts, so it needs no LLM, database, or GPU.
 
-- **Chat demo** (Gradio) — ask a question and get a graph-grounded answer that
-  cites PubMed IDs, using the winning `graph` arm. Live demo, so it needs
-  ArangoDB + Ollama running:
-  ```bash
-  make chat            # or: python app/chat_app.py --share
-  ```
-- **Results dashboard** (Streamlit) — the 4-arm ablation, McNemar tests, and
-  per-class breakdown. Reads `results/` only (no LLM or DB), so it deploys to
-  Streamlit Cloud as a click-to-view link:
-  ```bash
-  make dashboard       # or: streamlit run app/dashboard.py
-  ```
+Run the dashboard locally:
 
-See [app/README.md](app/README.md) for deployment notes.
+```bash
+pip install -r app/requirements.txt
+make dashboard            # or: streamlit run app/dashboard.py
+```
+
+**Chat demo** — a Gradio assistant that answers from the graph and cites PubMed
+IDs (the winning `graph` arm). It's a *live* pipeline that needs a reachable
+ArangoDB + Ollama, so run it yourself (best on a GPU Colab):
+
+```bash
+pip install -r requirements-app.txt
+python app/chat_app.py --share        # public Gradio link
+```
+
+A hosted always-on chat isn't provided on purpose — it would need a paid GPU and
+a persistent ArangoDB. See [app/README.md](app/README.md) for details.
 
 ---
 

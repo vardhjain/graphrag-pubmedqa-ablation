@@ -43,7 +43,22 @@ def load_raw():
 
 
 def main():
-    st.set_page_config(page_title="GraphRAG vs PlainRAG — PubMedQA", layout="wide")
+    repo = "https://github.com/vardhjain/Knowledge_Graph_Question_Answering"
+    st.set_page_config(
+        page_title="GraphRAG vs PlainRAG — PubMedQA Ablation",
+        page_icon="🧬",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+        menu_items={
+            "Get Help": repo,
+            "Report a bug": f"{repo}/issues",
+            "About": (
+                "### GraphRAG vs PlainRAG — a fair 4-arm ablation on PubMedQA\n"
+                "Every layer held constant; only the retrieval strategy changes.\n\n"
+                f"Source: [{repo}]({repo})"
+            ),
+        },
+    )
     st.title("GraphRAG vs PlainRAG — a fair 4-arm ablation on PubMedQA")
 
     try:
@@ -74,6 +89,16 @@ def main():
         "(`plain_rr → graph`: +22.5 pp, McNemar p < 0.0001). The reranker helps "
         "but isn't significant; the concept hop doesn't help and costs ~5× latency."
     )
+
+    with st.expander("How this is measured (fairness)"):
+        st.markdown(
+            "All four arms share the same corpus, chunking, embedder, reranker, "
+            "prompt, LLM, seed, and top-k — **only the retrieval strategy changes**, "
+            "so each adjacent contrast isolates one component. Significance is a "
+            "paired **McNemar** test on the same questions. The graph context is "
+            "leakage-free: no question-derived titles or gold labels ever reach the "
+            "prompt."
+        )
 
     left, right = st.columns([3, 2])
 
@@ -115,11 +140,8 @@ def main():
                                average=None, zero_division=0)
                 st.write("Per-class F1")
                 st.bar_chart(pd.Series(f1s, index=LABELS))
-    else:
-        st.info(
-            "Add the per-sample `results/{arm}_results.json` files to unlock "
-            "confusion matrices and per-class F1 here."
-        )
+
+    st.caption(f"Source: {repo}")
 
 
 if __name__ == "__main__":
