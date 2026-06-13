@@ -60,7 +60,7 @@ class ArangoConfig:
     """ArangoDB Oasis connection settings, read from the environment."""
 
     host: str = field(default_factory=lambda: os.environ.get(
-        "ARANGO_HOST", "https://581c546a8d66.arangodb.cloud:8529"))
+        "ARANGO_HOST", "http://localhost:8529"))
     user: str = field(default_factory=lambda: os.environ.get("ARANGO_USER", "root"))
     password: str = field(default_factory=lambda: os.environ.get("ARANGO_PASS", ""))
     db_name: str = field(default_factory=lambda: os.environ.get("ARANGO_DB", "pubmed_graph"))

@@ -1,0 +1,22 @@
+# Local ArangoDB for development and running the benchmark without a cloud account.
+#
+#   docker compose up -d
+#   export ARANGO_PASS=devpassword          # PowerShell: $env:ARANGO_PASS="devpassword"
+#   python scripts/ingest.py                # then run_benchmark.py / compare.py
+#
+# Web UI: http://localhost:8529  (user: root, password: devpassword)
+# Change the password below (and ARANGO_PASS) before exposing this anywhere.
+
+services:
+  arangodb:
+    image: arangodb:3.11
+    container_name: kgqa-arangodb
+    environment:
+      ARANGO_ROOT_PASSWORD: devpassword
+    ports:
+      - "8529:8529"
+    volumes:
+      - arango_data:/var/lib/arangodb3
+
+volumes:
+  arango_data:

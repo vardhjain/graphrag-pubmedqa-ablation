@@ -83,7 +83,7 @@ docs/                     project report (PDF) and slides (PPTX)
 - **Dataset:** PubMedQA (`pqa_labeled` for evaluation, `pqa_unlabeled` for corpus)
 - **Embeddings:** `all-MiniLM-L6-v2` (384-dim)
 - **Reranker:** `cross-encoder/ms-marco-MiniLM-L-6-v2`
-- **Graph DB:** ArangoDB Oasis (Papers / Chunks / Concepts; HAS_CONTEXT / MENTIONS)
+- **Graph DB:** ArangoDB — any instance (local Docker or [ArangoDB Oasis](https://cloud.arangodb.com)); schema: Papers / Chunks / Concepts; HAS_CONTEXT / MENTIONS
 - **LLM:** `deepseek-r1:8b` via [Ollama](https://ollama.com)
 
 ---
@@ -92,34 +92,42 @@ docs/                     project report (PDF) and slides (PPTX)
 
 ```bash
 pip install -r requirements.txt        # add -r requirements-dev.txt for tests
-cp .env.example .env                    # then fill in ARANGO_PASS
+cp .env.example .env                    # then set ARANGO_PASS (and ARANGO_HOST if remote)
 ```
 
-Secrets are read from the environment (or a local `.env`, or Colab Secrets):
-`ARANGO_HOST`, `ARANGO_USER`, `ARANGO_PASS`, `ARANGO_DB`. Nothing is hardcoded.
+All connection settings are read from the environment (or a local `.env`, or
+Colab Secrets) — `ARANGO_HOST`, `ARANGO_USER`, `ARANGO_PASS`, `ARANGO_DB`.
+**Nothing is hardcoded**; the default host is `http://localhost:8529`.
+
+You need two services: an **ArangoDB** instance and a running **Ollama**.
+
+```bash
+# ArangoDB — option A: local, via the bundled compose file
+docker compose up -d                    # ArangoDB at localhost:8529 (root / devpassword)
+export ARANGO_PASS=devpassword          # PowerShell: $env:ARANGO_PASS="devpassword"
+
+# ArangoDB — option B: a cloud deployment (e.g. ArangoDB Oasis free tier)
+# export ARANGO_HOST=https://<your-deployment>.arangodb.cloud:8529
+# export ARANGO_PASS=<your-password>
+
+# Ollama (LLM)
+ollama serve & ollama pull deepseek-r1:8b
+```
 
 ## Running the benchmark
 
-The graph lives in ArangoDB Oasis and the LLM runs on a GPU, so the benchmark is
-designed to run on **Google Colab (T4)** — open the notebooks below. To run
-locally you need a reachable ArangoDB and a running Ollama.
-
 ```bash
-# 1. Build the graph once
-python scripts/ingest.py
-
-# 2. Run each arm (downloads + caches the shared chunk corpus on first run)
-python scripts/run_benchmark.py --arm plain          --n 200
-python scripts/run_benchmark.py --arm plain_rr       --n 200
-python scripts/run_benchmark.py --arm graph          --n 200
-python scripts/run_benchmark.py --arm graph_concepts --n 200
-
-# 3. Summary table, McNemar tests, ablation figure -> results/
-python scripts/compare.py
+python scripts/ingest.py                              # build the graph once
+make benchmark                                        # all four arms (n=200)
+#   or run arms individually:
+#   python scripts/run_benchmark.py --arm plain --n 200   (plain_rr / graph / graph_concepts)
+python scripts/compare.py                             # table + McNemar + figure -> results/
 ```
 
-On Colab, run [`notebooks/01_ingest.ipynb`](notebooks/01_ingest.ipynb) once, then
-[`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb).
+The benchmark is LLM-bound and benefits from a GPU. If you don't have one,
+**Google Colab** works well: run [`notebooks/01_ingest.ipynb`](notebooks/01_ingest.ipynb)
+once, then [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb) (set
+`ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets).
 
 ---
 
