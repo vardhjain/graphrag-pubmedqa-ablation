@@ -76,7 +76,6 @@ def main():
             "deepseek-r1:8b. Answers cite the source PubMed IDs."
         ),
         examples=EXAMPLES,
-        theme="soft",
     ).launch(share=args.share, server_port=args.port)
 
 

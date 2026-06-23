@@ -168,6 +168,8 @@ pip install -r requirements-app.txt
 python app/chat_app.py --share        # public Gradio link
 ```
 
+![GraphRAG chat interface](assets/chat.png)
+
 A hosted always-on chat isn't provided on purpose — it would need a paid GPU and
 a persistent ArangoDB. See [app/README.md](app/README.md) for details.
 
