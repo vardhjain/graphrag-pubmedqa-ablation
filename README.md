@@ -5,6 +5,7 @@
 ### GraphRAG vs PlainRAG on PubMedQA — a fair, leakage-free, statistically-tested ablation
 
 [![CI](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml/badge.svg)](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/vardhjain/Knowledge_Graph_Question_Answering/graph/badge.svg)](https://codecov.io/gh/vardhjain/Knowledge_Graph_Question_Answering)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)

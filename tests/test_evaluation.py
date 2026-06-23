@@ -47,3 +47,25 @@ def test_mcnemar_no_difference():
     res = mcnemar_test(gt, gt, gt)
     assert res["discordant"] == 0
     assert res["p_value"] == 1.0
+
+
+def test_mcnemar_length_mismatch_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        mcnemar_test(["yes"], ["yes"], ["yes", "no"])
+
+
+def test_report_and_save_roundtrip(tmp_path):
+    import json
+    ev = Evaluator("graph")
+    ev.record("yes", "yes", 1.0, "1")
+    ev.record("no", "yes", 2.0, "2")
+    summary = ev.report()
+    assert summary["model"] == "graph" and summary["samples"] == 2
+    assert "macro_f1" in summary
+
+    path = tmp_path / "results.json"
+    ev.save(str(path))
+    loaded = json.loads(path.read_text())
+    assert loaded["samples"] == 2
+    assert loaded["ids"] == ["1", "2"]

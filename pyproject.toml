@@ -36,6 +36,12 @@ pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-q"
 
+[tool.coverage.run]
+source = ["kgqa"]
+
+[tool.coverage.report]
+show_missing = true
+
 [tool.ruff]
 line-length = 100
 src = ["src", "scripts", "tests", "app"]

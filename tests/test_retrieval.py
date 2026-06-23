@@ -99,3 +99,15 @@ def test_chat_returns_answer_and_source_pubids(fake_encoder, fake_reranker, monk
     assert set(out) >= {"answer", "sources", "context"}
     assert out["sources"] == ["1"]          # the retrieved paper's pubid
     assert "Yes" in out["answer"]
+
+
+def test_chunkstore_from_dataset_builds_corpus(monkeypatch, fake_encoder):
+    import kgqa.data as data
+    from kgqa.retrieval import ChunkStore
+
+    monkeypatch.setattr(data, "iter_chunks",
+                        lambda include_unlabeled=True: iter([("1", 0, "alpha"), ("2", 0, "beta")]))
+    store = ChunkStore.from_dataset(fake_encoder, include_unlabeled=False)
+    assert len(store) == 2
+    assert store.paper_keys == ["1", "2"]
+    assert store.ids == ["Chunks/1_0", "Chunks/2_0"]
