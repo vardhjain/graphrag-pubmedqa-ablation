@@ -43,10 +43,10 @@ entrypoint's directory before the heavy root `requirements.txt`).
 3. **Create app → Deploy a public app from GitHub.**
 4. Repository `vardhjain/Knowledge_Graph_Question_Answering`, Branch `main`,
    **Main file path `app/dashboard.py`**.
-5. Advanced settings → Python 3.11; set the subdomain to `kgqa-ablation`
-   (matches the README badge → `https://kgqa-ablation.streamlit.app`).
-6. **Deploy.** Copy the final URL; if you changed the subdomain, update the
-   badge + "Live demo" link in the root README.
+5. (Optional) Advanced settings → Python 3.11. Set a custom subdomain (e.g.
+   `kgqa-ablation`) for a clean URL, or accept the auto-generated one.
+6. **Deploy.** Copy the final `*.streamlit.app` URL and point the badge +
+   "Live demo" link in the root README at it.
 
 > Tip: commit the per-sample `results/{arm}_results.json` files too (if you still
 > have them from the benchmark run) to light up the confusion-matrix section.

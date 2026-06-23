@@ -1,7 +1,7 @@
 ---
 ---
 
-[**▶ Live demo**](https://kgqa-ablation.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Graph_RAG_PPT.pptx)
+[**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Graph_RAG_PPT.pptx)
 
 ## What this is
 
@@ -34,6 +34,6 @@ context, not by *broadening* it.
 
 ## Explore
 
-- **[Live results dashboard](https://kgqa-ablation.streamlit.app)** — interactive bars, significance tests, per-class breakdown
+- **[Live results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — interactive bars, significance tests, per-class breakdown
 - **[Source code & README](https://github.com/vardhjain/Knowledge_Graph_Question_Answering)** — package, scripts, tests, CI
 - **[Project report (PDF)](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Project_Report.pdf)** and **[slides](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Graph_RAG_PPT.pptx)**
