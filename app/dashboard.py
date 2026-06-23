@@ -105,7 +105,7 @@ def main():
     with left:
         st.subheader("Accuracy & macro-F1 by arm")
         df = pd.DataFrame(arms).set_index("arm")
-        st.bar_chart(df[["accuracy", "macro_f1"]])
+        st.bar_chart(df[["accuracy", "macro_f1"]], stack=False, color=["#2196F3", "#FF9800"])
         st.dataframe(
             df[["adds", "accuracy", "macro_f1", "avg_latency", "samples"]],
             use_container_width=True,
@@ -120,9 +120,8 @@ def main():
             cdf[["contrast", "delta_acc", "gains", "losses", "p_value", "significant"]],
             use_container_width=True, hide_index=True,
         )
-        fig_path = os.path.join(RESULTS_DIR, "ablation.png")
-        if os.path.exists(fig_path):
-            st.image(fig_path, caption="4-arm ablation", use_container_width=True)
+        st.caption("Latency by arm (seconds / query)")
+        st.bar_chart(df["avg_latency"], color="#26A69A", horizontal=True)
 
     # ── optional: per-class detail from raw per-sample results ────────────────
     raw = load_raw()

@@ -150,6 +150,8 @@ paired McNemar significance tests, latency, and (when raw results are present)
 per-class confusion matrices. No setup, no login — it reads the committed
 `results/` artifacts, so it needs no LLM, database, or GPU.
 
+[![Results dashboard](assets/dashboard.png)](https://kgqa-ablation.streamlit.app)
+
 Run the dashboard locally:
 
 ```bash

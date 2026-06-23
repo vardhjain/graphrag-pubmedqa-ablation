@@ -9,6 +9,6 @@
 # Also handy locally — `pip install -r app/requirements.txt` runs just the
 # dashboard. It needs streamlit + pandas (+ scikit-learn, used lazily for the
 # per-class confusion matrices when results/{arm}_results.json files are present).
-streamlit>=1.30
+streamlit>=1.39
 pandas>=2.0
 scikit-learn>=1.3
