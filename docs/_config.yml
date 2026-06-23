@@ -1,0 +1,10 @@
+# GitHub Pages site (Settings → Pages → Source: Deploy from a branch → main → /docs)
+title: Knowledge Graph Question Answering
+description: GraphRAG vs PlainRAG on PubMedQA — a fair, leakage-free, statistically-tested ablation
+theme: jekyll-theme-cayman
+show_downloads: false
+
+# Keep the repo's data/binaries out of the built site.
+exclude:
+  - "*.pdf"
+  - "*.pptx"

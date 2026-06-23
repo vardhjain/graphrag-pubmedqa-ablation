@@ -10,6 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Live Demo](https://img.shields.io/badge/Streamlit-Live%20Demo-FF4B4B?logo=streamlit&logoColor=white)](https://kgqa-ablation.streamlit.app)
+[![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/Knowledge_Graph_Question_Answering/)
 
 [**▶ Live demo**](https://kgqa-ablation.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
 
@@ -231,6 +232,12 @@ CI runs ruff + pytest on every push/PR (Python 3.10 and 3.11). Unit tests inject
 fakes for the encoder, reranker, and ArangoDB, so the heavy ML dependencies are
 never needed just to verify the logic. Optionally `pre-commit install` to run
 ruff automatically on each commit.
+
+## 📖 Documentation
+
+- **[Project site](https://vardhjain.github.io/Knowledge_Graph_Question_Answering/)** — the story and results at a glance (GitHub Pages)
+- **[Project report (PDF)](docs/Project_Report.pdf)** and **[slides](docs/Graph_RAG_PPT.pptx)**
+- **[Architecture diagram](assets/architecture.svg)** · **[CHANGELOG](CHANGELOG.md)** · **[CONTRIBUTING](CONTRIBUTING.md)**
 
 ## 🤝 Contributing
 
