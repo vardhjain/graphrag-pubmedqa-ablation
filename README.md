@@ -1,10 +1,18 @@
-# Knowledge Graph Question Answering — GraphRAG vs PlainRAG, done fairly
+<div align="center">
+
+# 🧬 Knowledge Graph Question Answering
+
+### GraphRAG vs PlainRAG on PubMedQA — a fair, leakage-free, statistically-tested ablation
 
 [![CI](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml/badge.svg)](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Live Demo](https://img.shields.io/badge/Streamlit-Live%20Demo-FF4B4B?logo=streamlit&logoColor=white)](https://kgqa-ablation.streamlit.app)
+
+[**▶ Live demo**](https://kgqa-ablation.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
+
+</div>
 
 A controlled study of **what a knowledge graph actually contributes** to
 retrieval-augmented question answering on biomedical literature
@@ -54,7 +62,7 @@ single-abstract dataset. We report that honestly rather than bury it — see
 
 ---
 
-## Repository layout
+## 🗂️ Repository layout
 
 ```
 src/kgqa/                 importable package — single source of truth
@@ -79,7 +87,7 @@ tests/                    pytest suite (runs on CPU, no Ollama/ArangoDB needed)
 docs/                     project report (PDF) and slides (PPTX)
 ```
 
-## Stack
+## 🧰 Stack
 
 - **Dataset:** PubMedQA (`pqa_labeled` for evaluation, `pqa_unlabeled` for corpus)
 - **Embeddings:** `all-MiniLM-L6-v2` (384-dim)
@@ -115,7 +123,7 @@ export ARANGO_PASS=devpassword          # PowerShell: $env:ARANGO_PASS="devpassw
 ollama serve & ollama pull deepseek-r1:8b
 ```
 
-## Running the benchmark
+## ⚙️ Running the benchmark
 
 ```bash
 python scripts/ingest.py                              # build the graph once
@@ -132,7 +140,7 @@ once, then [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb) (set
 
 ---
 
-## Live demo
+## ▶ Live demo
 
 **[▶ Open the results dashboard](https://kgqa-ablation.streamlit.app)** — an
 interactive Streamlit dashboard of the 4-arm ablation: headline accuracy, the
@@ -209,7 +217,7 @@ The macro-F1 / accuracy gap on the graph arms reflects weak recall on the rare
 
 ---
 
-## Development
+## 🧪 Development
 
 ```bash
 make install-dev    # deps for tests + lint
@@ -223,18 +231,18 @@ fakes for the encoder, reranker, and ArangoDB, so the heavy ML dependencies are
 never needed just to verify the logic. Optionally `pre-commit install` to run
 ruff automatically on each commit.
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the
 project layout, and the fairness ground rules. Changes are tracked in
 [CHANGELOG.md](CHANGELOG.md); please be kind and follow the
 [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Citing
+## 📚 Citing
 
 If this project or its findings are useful in your work, please cite it — see
 [CITATION.cff](CITATION.cff) (GitHub renders a "Cite this repository" button).
 
-## License
+## 📄 License
 
 [MIT](LICENSE).
