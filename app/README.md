@@ -41,7 +41,7 @@ entrypoint's directory before the heavy root `requirements.txt`).
    `.streamlit/config.toml`, and the `results/` artifacts.
 2. Go to <https://share.streamlit.io>, sign in with GitHub, authorize the repo.
 3. **Create app → Deploy a public app from GitHub.**
-4. Repository `vardhjain/Knowledge_Graph_Question_Answering`, Branch `main`,
+4. Repository `vardhjain/graphrag-pubmedqa-ablation`, Branch `main`,
    **Main file path `app/dashboard.py`**.
 5. (Optional) Advanced settings → Python 3.11. Set a custom subdomain (e.g.
    `kgqa-ablation`) for a clean URL, or accept the auto-generated one.

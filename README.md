@@ -4,13 +4,13 @@
 
 ### GraphRAG vs PlainRAG on PubMedQA — a fair, leakage-free, statistically-tested ablation
 
-[![CI](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml/badge.svg)](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/vardhjain/Knowledge_Graph_Question_Answering/graph/badge.svg)](https://codecov.io/gh/vardhjain/Knowledge_Graph_Question_Answering)
+[![CI](https://github.com/vardhjain/graphrag-pubmedqa-ablation/actions/workflows/ci.yml/badge.svg)](https://github.com/vardhjain/graphrag-pubmedqa-ablation/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/vardhjain/graphrag-pubmedqa-ablation/graph/badge.svg)](https://codecov.io/gh/vardhjain/graphrag-pubmedqa-ablation)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Live Demo](https://img.shields.io/badge/Streamlit-Live%20Demo-FF4B4B?logo=streamlit&logoColor=white)](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)
-[![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/Knowledge_Graph_Question_Answering/)
+[![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
 [**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
 
@@ -260,7 +260,7 @@ ruff automatically on each commit.
 
 ## 📖 Documentation
 
-- **[Project site](https://vardhjain.github.io/Knowledge_Graph_Question_Answering/)** — the story and results at a glance (GitHub Pages)
+- **[Project site](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)** — the story and results at a glance (GitHub Pages)
 - **[Project report (PDF)](docs/Project_Report.pdf)** and **[slides](docs/Graph_RAG_PPT.pptx)**
 - **[Architecture diagram](assets/architecture.svg)** · **[CHANGELOG](CHANGELOG.md)** · **[CONTRIBUTING](CONTRIBUTING.md)**
 
