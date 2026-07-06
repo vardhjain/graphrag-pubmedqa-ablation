@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question / discussion
-    url: https://github.com/vardhjain/Knowledge_Graph_Question_Answering/discussions
+    url: https://github.com/vardhjain/graphrag-pubmedqa-ablation/discussions
     about: Ask a question or discuss the methodology, results, or design.

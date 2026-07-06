@@ -43,7 +43,7 @@ def load_raw():
 
 
 def main():
-    repo = "https://github.com/vardhjain/Knowledge_Graph_Question_Answering"
+    repo = "https://github.com/vardhjain/graphrag-pubmedqa-ablation"
     st.set_page_config(
         page_title="GraphRAG vs PlainRAG — PubMedQA Ablation",
         page_icon="🧬",

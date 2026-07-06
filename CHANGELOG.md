@@ -53,5 +53,5 @@ controlled, reproducible 4-arm ablation with an industry-standard repo layout.
   (`keep_alive`); `LLM_NUM_CTX` / `LLM_NUM_PREDICT` are environment-tunable.
 - Removed the dead `faiss` dependency (PlainRAG uses the shared numpy-cosine store).
 
-[Unreleased]: https://github.com/vardhjain/Knowledge_Graph_Question_Answering/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/vardhjain/Knowledge_Graph_Question_Answering/releases/tag/v1.0.0
+[Unreleased]: https://github.com/vardhjain/graphrag-pubmedqa-ablation/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/vardhjain/graphrag-pubmedqa-ablation/releases/tag/v1.0.0

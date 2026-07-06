@@ -1,7 +1,7 @@
 ---
 ---
 
-[**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Graph_RAG_PPT.pptx)
+[**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/graphrag-pubmedqa-ablation) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)
 
 ## What this is
 
@@ -12,7 +12,7 @@ where every layer (corpus, chunking, embedder, reranker, prompt, LLM, top-k, see
 is held constant, so the accuracy change between adjacent arms is attributable to
 exactly one component — verified with a paired **McNemar** test.
 
-![Architecture and 4-arm ablation](https://raw.githubusercontent.com/vardhjain/Knowledge_Graph_Question_Answering/main/assets/architecture.svg)
+![Architecture and 4-arm ablation](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/assets/architecture.svg)
 
 ## Results (n = 200, seed 42)
 
@@ -23,7 +23,7 @@ exactly one component — verified with a paired **McNemar** test.
 | **`graph`** | **59.5%** | **50.5%** | + parent-paper expansion |
 | `graph_concepts` | 57.5% | 50.0% | + MeSH concept hop |
 
-![4-arm ablation](https://raw.githubusercontent.com/vardhjain/Knowledge_Graph_Question_Answering/main/results/ablation.png)
+![4-arm ablation](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/results/ablation.png)
 
 **The honest finding:** the graph's decisive, statistically significant win comes
 from **parent-document expansion** (`plain_rr → graph`: **+22.5 pp**, McNemar
@@ -35,5 +35,5 @@ context, not by *broadening* it.
 ## Explore
 
 - **[Live results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — interactive bars, significance tests, per-class breakdown
-- **[Source code & README](https://github.com/vardhjain/Knowledge_Graph_Question_Answering)** — package, scripts, tests, CI
-- **[Project report (PDF)](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Project_Report.pdf)** and **[slides](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/docs/Graph_RAG_PPT.pptx)**
+- **[Source code & README](https://github.com/vardhjain/graphrag-pubmedqa-ablation)** — package, scripts, tests, CI
+- **[Project report (PDF)](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf)** and **[slides](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)**

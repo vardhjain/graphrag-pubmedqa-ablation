@@ -6,7 +6,7 @@ This is a research project, but a few things are worth handling carefully.
 
 If you find a security issue (for example, an accidental credential commit or a
 dependency vulnerability), please **do not open a public issue**. Instead, use
-GitHub's [private vulnerability reporting](https://github.com/vardhjain/Knowledge_Graph_Question_Answering/security/advisories/new)
+GitHub's [private vulnerability reporting](https://github.com/vardhjain/graphrag-pubmedqa-ablation/security/advisories/new)
 or email the maintainer. You can expect an acknowledgement within a few days.
 
 ## Secrets
