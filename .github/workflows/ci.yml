@@ -31,6 +31,13 @@ jobs:
       - name: Lint (ruff)
         run: ruff check src scripts tests app backend
 
+      - name: Eval regression gate
+        # Blocks the build if results/summary.json (what RESULTS.md, the
+        # README, and the /benchmark dashboard all pull from) is ever edited
+        # down or regresses -- see tests/test_results_regression.py for why
+        # this doesn't re-run the LLM benchmark itself (needs GPU + ArangoDB).
+        run: pytest tests/test_results_regression.py -v
+
       - name: Test (pytest)
         run: pytest --cov=kgqa --cov=graphrag --cov-report=xml --cov-report=term-missing
 
