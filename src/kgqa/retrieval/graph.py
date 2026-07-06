@@ -102,7 +102,14 @@ class GraphRetriever(BaseRetriever):
         )
         return [(row["paper"], row.get("abstract", "")) for row in rows]
 
-    def _build_context(self, query: str, candidates: list[Candidate]) -> str:
+    def gather_studies(self, candidates: list[Candidate]) -> list[tuple[str, str]]:
+        """Expand ``candidates`` to (paper_key, full_abstract) pairs via the graph.
+
+        Degrades to the raw retrieved chunks if the graph is unreachable.
+        Exposed (not just used internally) so callers that also need the
+        expansion result -- e.g. to build a reasoning-path visualization --
+        don't have to re-run the AQL traversal themselves.
+        """
         chunk_ids = [c.chunk_id for c in candidates]
         try:
             studies = self._parent_abstracts(chunk_ids)
@@ -114,10 +121,17 @@ class GraphRetriever(BaseRetriever):
         except Exception as exc:  # graph unreachable -> degrade to raw chunks
             print(f"[GraphRAG] Graph expansion failed ({exc}). Using raw chunks.")
             studies = [(c.paper_key, c.text) for c in candidates]
+        return studies
 
-        parts = [
-            f"=== STUDY {i + 1} ===\n{abstract}"
-            for i, (_key, abstract) in enumerate(studies)
-            if abstract
-        ]
-        return "\n\n".join(parts) if parts else "No context found."
+    def _build_context(self, query: str, candidates: list[Candidate]) -> str:
+        return format_studies(self.gather_studies(candidates))
+
+
+def format_studies(studies: list[tuple[str, str]]) -> str:
+    """Render (paper_key, abstract) pairs into the shared ``=== STUDY n ===`` context."""
+    parts = [
+        f"=== STUDY {i + 1} ===\n{abstract}"
+        for i, (_key, abstract) in enumerate(studies)
+        if abstract
+    ]
+    return "\n\n".join(parts) if parts else "No context found."
