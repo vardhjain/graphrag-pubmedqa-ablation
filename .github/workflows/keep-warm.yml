@@ -1,0 +1,22 @@
+name: Keep backend warm
+
+# Render's free tier sleeps after ~15 min idle and cold-starts in ~30-50s.
+# Ping /health every 10 minutes during daytime hours only (13:00-23:00 UTC,
+# roughly 6am-4pm Pacific) so we don't blow through the schedule for no
+# audience and don't run this 24/7 for free.
+on:
+  schedule:
+    - cron: "*/10 13-23 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          if [ -z "${{ secrets.BACKEND_URL }}" ]; then
+            echo "BACKEND_URL secret not set yet -- skipping (set it once the Render service is deployed)."
+            exit 0
+          fi
+          curl -fsS "${{ secrets.BACKEND_URL }}/health"
