@@ -1,3 +1,9 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+# CPU-only torch build -- the default PyPI wheel bundles CUDA libraries the
+# hosted backend (Render, no GPU) never uses, which alone can be the
+# difference between fitting and OOM-ing on a 512MB free-tier instance.
+torch
+
 -r ../requirements.txt
 
 # API server
