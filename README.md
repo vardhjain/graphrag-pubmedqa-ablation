@@ -14,6 +14,8 @@
 
 [**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
 
+Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
+
 </div>
 
 A controlled study of **what a knowledge graph actually contributes** to
@@ -38,6 +40,24 @@ attributable to exactly one component, and we report a **paired McNemar test** s
 you can tell a real effect from noise.
 
 ![Architecture and 4-arm ablation](assets/architecture.svg)
+
+---
+
+## Hosted agent
+
+Beyond the research ablation above, [`backend/`](backend/) (FastAPI) and
+[`frontend/`](frontend/) (Next.js) turn the winning `graph` arm into a live
+chat agent with a reasoning-path visualization and a `/benchmark` dashboard.
+See [`backend/README.md`](backend/README.md) and
+[`frontend/README.md`](frontend/README.md) for setup and deployment.
+
+**Scope limit:** the hosted demo's graph (`graph_id="demo"`) runs on Neo4j
+AuraDB Free, seeded with only the PubMedQA **labeled split (1,000 papers)**
+via [`scripts/ingest_neo4j.py`](scripts/ingest_neo4j.py) -- not the full
+~62k-paper corpus the benchmark above was run over. That's a deliberate,
+documented tradeoff to keep the hosted demo on a genuinely free-forever tier;
+it doesn't affect the numbers in [RESULTS.md](RESULTS.md), which come from
+the untouched ArangoDB-based benchmark pipeline.
 
 ---
 
