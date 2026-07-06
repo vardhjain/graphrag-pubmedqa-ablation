@@ -6,7 +6,8 @@ scikit-learn>=1.3
 scipy>=1.10
 
 # Knowledge graph
-python-arango>=7.9.0
+python-arango>=7.9.0    # benchmarked ablation pipeline (scripts/ingest.py, RESULTS.md)
+neo4j>=5.20             # hosted agent's demo graph only (scripts/ingest_neo4j.py)
 
 # LLM client
 requests>=2.31

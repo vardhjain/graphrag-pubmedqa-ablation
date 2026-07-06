@@ -74,6 +74,53 @@ class FakeDB:
         self.aql = FakeAQL(self)
 
 
+class FakeNeo4jRecord(dict):
+    """dict subclass so ``row["key"]`` works like a real neo4j Record."""
+
+
+class FakeNeo4jSession:
+    def __init__(self, driver):
+        self.driver = driver
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def run(self, query, **params):
+        # Parent expansion: map chunk keys -> parent paper full abstracts.
+        if "HAS_CONTEXT]-(paper:Paper)" in query:
+            seen, out = set(), []
+            for ckey in params["keys"]:
+                pkey = ckey.rsplit("_", 1)[0]
+                if pkey in seen:
+                    continue
+                seen.add(pkey)
+                out.append(FakeNeo4jRecord(paper=pkey, texts=[self.driver.abstracts[pkey]]))
+            return out
+        # Concept hop: return configured neighbours for the seed papers.
+        if "MENTIONS]->(concept:Concept)" in query:
+            seeds = set(params["paper_keys"])
+            out = []
+            for nkey, abstract in self.driver.neighbours:
+                if nkey not in seeds:
+                    out.append(FakeNeo4jRecord(paper=nkey, texts=[abstract], shared=1))
+            return out[: params.get("limit", 3)]
+        return []
+
+
+class FakeNeo4jDriver:
+    """Minimal Neo4j driver stand-in for graph-expansion tests."""
+
+    def __init__(self, abstracts, neighbours=()):
+        self.abstracts = abstracts  # {paper_key: full abstract}
+        self.neighbours = list(neighbours)  # [(paper_key, abstract), ...]
+
+    def session(self):
+        return FakeNeo4jSession(self)
+
+
 @pytest.fixture
 def fake_encoder():
     return FakeEncoder()

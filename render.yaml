@@ -31,3 +31,12 @@ services:
         sync: false
       - key: ARANGO_DB
         sync: false
+      # The demo graph (graph_id="demo") -- see scripts/ingest_neo4j.py.
+      # Separate from the ArangoDB vars above, which are for the benchmarked
+      # ablation / any real dataset a future /ingest builds.
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USER
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false

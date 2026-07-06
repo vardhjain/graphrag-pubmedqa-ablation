@@ -123,6 +123,44 @@ class ChunkStore:
                              "texts": texts, "embeddings": embeddings_np}, f)
         return cls(ids, paper_keys, texts, embeddings_np)
 
+    @classmethod
+    def from_neo4j(cls, driver, cache_file: str | None = None) -> ChunkStore:
+        """Download chunk vectors from Neo4j (with optional pickle cache).
+
+        Mirrors ``from_arango`` -- chunk embeddings are pre-computed once at
+        ingest time (``scripts/ingest_neo4j.py``) and stored as a node
+        property, so this is a bulk read, not a live re-encode.
+        """
+        if cache_file:
+            import os
+
+            if os.path.exists(cache_file):
+                with open(cache_file, "rb") as f:
+                    data = pickle.load(f)
+                if len(data["embeddings"]):
+                    return cls(data["ids"], data["paper_keys"],
+                               data["texts"], np.asarray(data["embeddings"]))
+
+        ids, paper_keys, texts, embeddings = [], [], [], []
+        with driver.session() as session:
+            rows = session.run(
+                "MATCH (p:Paper)-[:HAS_CONTEXT]->(c:Chunk) "
+                "WHERE c.embedding IS NOT NULL "
+                "RETURN c.key AS key, p.key AS paper, c.text AS text, c.embedding AS emb"
+            )
+            for row in rows:
+                ids.append(f"Chunks/{row['key']}")
+                paper_keys.append(row["paper"])
+                texts.append(row["text"])
+                embeddings.append(row["emb"])
+
+        embeddings_np = np.asarray(embeddings, dtype=np.float32)
+        if cache_file and ids:
+            with open(cache_file, "wb") as f:
+                pickle.dump({"ids": ids, "paper_keys": paper_keys,
+                             "texts": texts, "embeddings": embeddings_np}, f)
+        return cls(ids, paper_keys, texts, embeddings_np)
+
 
 class BaseRetriever(ABC):
     """encode -> (optional) rerank -> select -> build context -> answer."""

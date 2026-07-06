@@ -42,3 +42,28 @@ def connect_arango(cfg, max_retries: int = 5):
             print(f"[ArangoDB] Attempt {attempt + 1} failed. Retrying in {wait}s...")
             time.sleep(wait)
     raise ConnectionError("Could not connect to ArangoDB.")
+
+
+def connect_neo4j(cfg, max_retries: int = 5):
+    """Connect to Neo4j AuraDB with retries. ``cfg`` is a Neo4jConfig.
+
+    Returns a ``neo4j.Driver`` (not a session) -- callers open a session per
+    query via ``driver.session()``, same pattern the driver itself expects.
+    """
+    import time
+
+    from neo4j import GraphDatabase
+    from neo4j.exceptions import ServiceUnavailable
+
+    cfg.require_password()
+    for attempt in range(max_retries):
+        try:
+            driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
+            driver.verify_connectivity()
+            print("[Neo4j] Connected.")
+            return driver
+        except ServiceUnavailable:
+            wait = (attempt + 1) * 5
+            print(f"[Neo4j] Attempt {attempt + 1} failed. Retrying in {wait}s...")
+            time.sleep(wait)
+    raise ConnectionError("Could not connect to Neo4j.")
