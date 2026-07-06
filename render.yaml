@@ -15,6 +15,20 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      # Render's free plan is 512MB RAM -- loading both the encoder and the
+      # cross-encoder reranker (each a full torch model) OOM-killed the
+      # instance in practice. Skip the reranker on this tier; retrievers
+      # already degrade gracefully to raw top-k without one (see
+      # BaseRetriever._select). Unset/remove this if upgrading to a plan
+      # with more memory.
+      - key: KGQA_SKIP_RERANKER
+        value: "true"
+      # Limits BLAS/OMP thread pools so torch/numpy don't each spin up one
+      # thread per core, which multiplies memory on shared/limited hosts.
+      - key: OMP_NUM_THREADS
+        value: "1"
+      - key: TOKENIZERS_PARALLELISM
+        value: "false"
       - key: CORS_ORIGINS
         # Placeholder until the Phase 3 frontend is deployed -- update this to
         # the Vercel URL then, or the frontend's requests will be CORS-blocked.

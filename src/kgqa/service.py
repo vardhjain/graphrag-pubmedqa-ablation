@@ -49,8 +49,16 @@ def _shared_encoder():
 
 
 def _shared_reranker():
+    """``None`` if ``KGQA_SKIP_RERANKER=true`` -- an escape hatch for hosting
+    tiers too small to hold both the encoder and the cross-encoder reranker
+    in memory at once (e.g. Render's free 512MB plan). Retrievers already
+    treat a ``None`` reranker as "skip reranking, use raw top-k" (see
+    ``BaseRetriever._select``), so this only degrades ranking quality on the
+    hosted demo -- it doesn't touch the benchmarked ablation, which always
+    loads the real reranker via ``load_reranker`` directly.
+    """
     global _RERANKER
-    if _RERANKER is None:
+    if _RERANKER is None and os.environ.get("KGQA_SKIP_RERANKER", "").lower() != "true":
         from .models import load_reranker
 
         _RERANKER = load_reranker()
