@@ -1,7 +1,8 @@
 """Service boundary: ``answer(question, graph_id)`` is the one entry point a
 web backend calls. Everything upstream (ingestion, extraction, graph
 construction, multi-hop retrieval) stays internal to this package; a caller
-never needs to know about ``ChunkStore``, ``GraphRetriever``, or ArangoDB.
+never needs to know about ``ChunkStore``, ``GraphRetriever``, ArangoDB, Neo4j,
+or which of the two backs a given ``graph_id`` (see the note below).
 
 The ``reasoning_path`` in the return value is an ordered list of graph steps
 (seed chunk -> parent paper -> optional concept-hop neighbour) so a frontend
@@ -14,15 +15,24 @@ import os
 import tempfile
 from dataclasses import dataclass, field
 
-from .config import ArangoConfig
+from .config import ArangoConfig, Neo4jConfig
 from .prompts import CHAT_SYSTEM_PROMPT, build_prompt
 from .providers import call_llm
 from .retrieval import ChunkStore
 from .retrieval.graph import GraphRetriever, format_studies
+from .retrieval.neo4j_graph import Neo4jGraphRetriever
+
+# ``graph_id="demo"`` is served by Neo4j AuraDB (see retrieval/neo4j_graph.py
+# and scripts/ingest_neo4j.py) -- a small, genuinely-free-forever graph DB
+# scoped to the labeled-split corpus. Any other graph_id (e.g. one /ingest
+# hands back for a real uploaded dataset) still uses ArangoDB, unchanged from
+# how the benchmarked pipeline works.
+_DEMO_GRAPH_ID = "demo"
 
 _STORE_CACHE: dict[str, ChunkStore] = {}
-_RETRIEVER_CACHE: dict[tuple[str, bool], GraphRetriever] = {}
-_DB_CACHE: dict[str, object] = {}
+_RETRIEVER_CACHE: dict[tuple[str, bool], GraphRetriever | Neo4jGraphRetriever] = {}
+_ARANGO_DB_CACHE: dict[str, object] = {}  # keyed by graph_id -- non-demo datasets only
+_NEO4J_DRIVER_CACHE: dict[None, object] = {}  # single slot -- only ever serves the demo graph
 _ENCODER = None
 _RERANKER = None
 _CACHE_DIR = os.environ.get("KGQA_CACHE_DIR", os.path.join(tempfile.gettempdir(), "kgqa_cache"))
@@ -48,10 +58,9 @@ def _shared_reranker():
 
 
 def _shared_db(graph_id: str):
-    """One ArangoDB connection per ``graph_id``, reused by the store and retriever.
-
-    ``graph_id="demo"`` connects to the env-configured default database (the
-    preloaded demo graph); any other id is treated as the database name.
+    """One ArangoDB connection per non-demo ``graph_id``, reused by the store
+    and retriever. Used for real datasets ``/ingest`` has built -- the demo
+    graph is served by Neo4j instead, see ``_shared_neo4j_driver``.
 
     Returns ``None`` (cached, so this is tried at most once per process) if
     ArangoDB isn't configured or isn't reachable -- ``GraphRetriever`` already
@@ -59,17 +68,38 @@ def _shared_db(graph_id: str):
     service still answers (without parent-document expansion) rather than
     hard-crashing when no graph is available.
     """
-    if graph_id not in _DB_CACHE:
+    if graph_id not in _ARANGO_DB_CACHE:
         from .models import connect_arango
 
-        cfg = ArangoConfig() if graph_id == "demo" else ArangoConfig(db_name=graph_id)
         try:
-            _DB_CACHE[graph_id] = connect_arango(cfg, max_retries=1)
+            _ARANGO_DB_CACHE[graph_id] = connect_arango(ArangoConfig(db_name=graph_id), max_retries=1)
         except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
             print(f"[GraphRAG] ArangoDB unavailable for graph_id={graph_id!r} ({exc}). "
                   "Falling back to ungraphed retrieval.")
-            _DB_CACHE[graph_id] = None
-    return _DB_CACHE[graph_id]
+            _ARANGO_DB_CACHE[graph_id] = None
+    return _ARANGO_DB_CACHE[graph_id]
+
+
+def _shared_neo4j_driver():
+    """One Neo4j driver for the demo graph (``scripts/ingest_neo4j.py``'s
+    labeled-split corpus), reused by the store and retriever. Kept in its own
+    single-slot cache (not ``_ARANGO_DB_CACHE``) so there's no possibility of
+    a graph_id string colliding with an internal cache key.
+
+    Returns ``None`` (cached, so this is tried at most once per process) if
+    Neo4j isn't configured or isn't reachable -- ``Neo4jGraphRetriever``
+    already degrades to raw retrieved chunks when its driver calls fail.
+    """
+    if None not in _NEO4J_DRIVER_CACHE:
+        from .models import connect_neo4j
+
+        try:
+            _NEO4J_DRIVER_CACHE[None] = connect_neo4j(Neo4jConfig(), max_retries=1)
+        except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
+            print(f"[GraphRAG] Neo4j unavailable for the demo graph ({exc}). "
+                  "Falling back to ungraphed retrieval.")
+            _NEO4J_DRIVER_CACHE[None] = None
+    return _NEO4J_DRIVER_CACHE[None]
 
 
 @dataclass
@@ -91,44 +121,58 @@ class AnswerResult:
 def _get_store(graph_id: str) -> ChunkStore:
     """Resolve a ``graph_id`` to its chunk store, building/caching on first use.
 
-    Prefers ``ChunkStore.from_arango`` -- ``scripts/ingest.py`` pre-computes
-    and stores every chunk's embedding in ArangoDB, so this just downloads
-    vectors (fast, no re-encoding; a local pickle cache makes even that a
-    one-time cost). This is what "preloaded demo graph" means: encoding the
-    ~62k-chunk PubMedQA corpus live on a request would take *hours* on a
-    CPU-only host, not a tolerable cold start.
+    ``graph_id="demo"`` prefers ``ChunkStore.from_neo4j`` -- ``scripts/
+    ingest_neo4j.py`` pre-computes and stores every chunk's embedding in
+    Neo4j, so this just downloads vectors (fast, no re-encoding; a local
+    pickle cache makes even that a one-time cost). Any other graph_id uses
+    ``ChunkStore.from_arango`` the same way, unchanged from before.
 
-    Only falls back to ``ChunkStore.from_dataset`` (encoding chunks locally)
-    when ArangoDB isn't reachable, and only over the small labeled split, so
-    the fallback is a bounded, if slower, degraded local-dev mode -- never
-    the full corpus.
+    Only falls back to ``ChunkStore.from_dataset`` (encoding chunks locally,
+    bounded to the small labeled split) when the graph DB isn't reachable --
+    a degraded local-dev mode, never used for the full corpus.
     """
     if graph_id in _STORE_CACHE:
         return _STORE_CACHE[graph_id]
 
     encoder = _shared_encoder()
-    db = _shared_db(graph_id)
-    if db is not None:
-        cache_file = os.path.join(_CACHE_DIR, f"{graph_id}_vectors.pkl")
-        store = ChunkStore.from_arango(db, cache_file=cache_file)
+    if graph_id == _DEMO_GRAPH_ID:
+        driver = _shared_neo4j_driver()
+        if driver is not None:
+            cache_file = os.path.join(_CACHE_DIR, "demo_neo4j_vectors.pkl")
+            store = ChunkStore.from_neo4j(driver, cache_file=cache_file)
+        else:
+            print("[GraphRAG] No Neo4j for the demo graph; encoding the labeled "
+                  "split locally as a bounded fallback (this is slow -- not for production).")
+            store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
     else:
-        print(f"[GraphRAG] No ArangoDB for graph_id={graph_id!r}; encoding the labeled "
-              "split locally as a bounded fallback (this is slow -- not for production).")
-        store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
+        db = _shared_db(graph_id)
+        if db is not None:
+            cache_file = os.path.join(_CACHE_DIR, f"{graph_id}_vectors.pkl")
+            store = ChunkStore.from_arango(db, cache_file=cache_file)
+        else:
+            print(f"[GraphRAG] No ArangoDB for graph_id={graph_id!r}; encoding the labeled "
+                  "split locally as a bounded fallback (this is slow -- not for production).")
+            store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
     _STORE_CACHE[graph_id] = store
     return store
 
 
-def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever:
+def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever | Neo4jGraphRetriever:
     key = (graph_id, use_concepts)
     if key in _RETRIEVER_CACHE:
         return _RETRIEVER_CACHE[key]
 
     store = _get_store(graph_id)
-    retriever = GraphRetriever(
-        store, _shared_encoder(), _shared_db(graph_id),
-        reranker=_shared_reranker(), use_concepts=use_concepts,
-    )
+    if graph_id == _DEMO_GRAPH_ID:
+        retriever = Neo4jGraphRetriever(
+            store, _shared_encoder(), _shared_neo4j_driver(),
+            reranker=_shared_reranker(), use_concepts=use_concepts,
+        )
+    else:
+        retriever = GraphRetriever(
+            store, _shared_encoder(), _shared_db(graph_id),
+            reranker=_shared_reranker(), use_concepts=use_concepts,
+        )
     _RETRIEVER_CACHE[key] = retriever
     return retriever
 

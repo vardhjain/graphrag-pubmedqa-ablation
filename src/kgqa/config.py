@@ -48,7 +48,11 @@ LLM_NUM_PREDICT = int(os.environ.get("LLM_NUM_PREDICT", "1024"))
 LLM_KEEP_ALIVE = os.environ.get("LLM_KEEP_ALIVE", "30m")
 LLM_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "180"))
 
-# ── Graph schema (must match scripts/ingest.py) ───────────────────────────────
+# ── Graph schema (must match scripts/ingest.py's ArangoDB collections) ────────
+# scripts/ingest_neo4j.py's Neo4j labels/relationship types mirror these names
+# conceptually (Paper/Chunk/Concept nodes, HAS_CONTEXT/MENTIONS relationships)
+# but aren't driven by these constants -- Neo4j has no separate "collection"
+# concept, so it hardcodes the same names directly in its Cypher queries.
 NODE_COLLECTIONS = ("Papers", "Chunks", "Concepts")
 EDGE_COLLECTIONS = ("HAS_CONTEXT", "MENTIONS")
 HAS_CONTEXT = "HAS_CONTEXT"  # Paper -> Chunk
@@ -72,4 +76,27 @@ class ArangoConfig:
                 '    PowerShell : $env:ARANGO_PASS = "your_password"\n'
                 "    bash       : export ARANGO_PASS=your_password\n"
                 "    Colab      : add ARANGO_PASS in the Secrets panel"
+            )
+
+
+@dataclass
+class Neo4jConfig:
+    """Neo4j AuraDB connection settings, read from the environment.
+
+    Only used by the hosted-agent service layer's ``graph_id="demo"`` path
+    (see ``kgqa/retrieval/neo4j_graph.py``) -- the benchmarked ArangoDB
+    pipeline (``scripts/ingest.py``, ``scripts/run_benchmark.py``) is
+    unaffected and keeps using ``ArangoConfig`` above.
+    """
+
+    uri: str = field(default_factory=lambda: os.environ.get("NEO4J_URI", "neo4j://localhost:7687"))
+    user: str = field(default_factory=lambda: os.environ.get("NEO4J_USER", "neo4j"))
+    password: str = field(default_factory=lambda: os.environ.get("NEO4J_PASSWORD", ""))
+
+    def require_password(self) -> None:
+        if not self.password:
+            raise OSError(
+                "NEO4J_PASSWORD is not set. Set it before connecting:\n"
+                '    PowerShell : $env:NEO4J_PASSWORD = "your_password"\n'
+                "    bash       : export NEO4J_PASSWORD=your_password"
             )

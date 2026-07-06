@@ -1,7 +1,7 @@
 import numpy as np
 
-from kgqa.retrieval import ChunkStore, GraphRetriever
-from tests.conftest import FakeDB
+from kgqa.retrieval import ChunkStore, Neo4jGraphRetriever
+from tests.conftest import FakeNeo4jDriver
 
 
 def make_retriever(encoder, reranker):
@@ -13,11 +13,11 @@ def make_retriever(encoder, reranker):
     ids = [f"Chunks/{k}_0" for k in keys]
     embs = encoder.encode(texts, normalize_embeddings=True)
     store = ChunkStore(ids, keys, texts, np.asarray(embs))
-    db = FakeDB(abstracts={
+    driver = FakeNeo4jDriver(abstracts={
         "1": "FULL ABSTRACT 1: aspirin trial methods results conclusion",
         "2": "FULL ABSTRACT 2: statin trial",
     })
-    return GraphRetriever(store, encoder, db, reranker=reranker, top_k_final=1)
+    return Neo4jGraphRetriever(store, encoder, driver, reranker=reranker, top_k_final=1)
 
 
 def test_answer_returns_answer_reasoning_path_and_sources(fake_encoder, fake_reranker, monkeypatch):
@@ -41,12 +41,12 @@ def test_answer_reasoning_path_includes_concept_neighbours(fake_encoder, fake_re
     texts = ["aspirin reduces heart attack risk in patients"]
     embs = fake_encoder.encode(texts, normalize_embeddings=True)
     store = ChunkStore(["Chunks/1_0"], ["1"], texts, np.asarray(embs))
-    db = FakeDB(
+    driver = FakeNeo4jDriver(
         abstracts={"1": "FULL ABSTRACT 1: aspirin"},
         neighbours=[("99", "NEIGHBOUR ABSTRACT via shared MeSH concept")],
     )
-    retriever = GraphRetriever(store, fake_encoder, db, reranker=fake_reranker,
-                              use_concepts=True, top_k_final=1)
+    retriever = Neo4jGraphRetriever(store, fake_encoder, driver, reranker=fake_reranker,
+                                    use_concepts=True, top_k_final=1)
     monkeypatch.setattr(service, "_get_retriever", lambda graph_id, use_concepts=False: retriever)
     monkeypatch.setattr(service, "call_llm", lambda task, prompt, system="": "answer")
 
@@ -57,26 +57,41 @@ def test_answer_reasoning_path_includes_concept_neighbours(fake_encoder, fake_re
 
 
 def test_shared_db_degrades_to_none_without_arango_configured(monkeypatch):
-    """Real code path (no mocked _get_retriever): demo mode must not crash
-    just because ARANGO_PASS is unset -- it should degrade, not raise."""
+    """Real code path: a non-demo (real-dataset) graph_id must not crash just
+    because ARANGO_PASS is unset -- it should degrade, not raise."""
     import kgqa.service as service
 
     monkeypatch.delenv("ARANGO_PASS", raising=False)
-    service._DB_CACHE.clear()
+    service._ARANGO_DB_CACHE.clear()
 
-    db = service._shared_db("demo")
+    db = service._shared_db("some_dataset")
 
     assert db is None
-    assert service._DB_CACHE["demo"] is None  # cached, so the failure isn't retried
+    assert service._ARANGO_DB_CACHE["some_dataset"] is None  # cached, so the failure isn't retried
 
 
-def test_get_retriever_builds_when_arango_unavailable(monkeypatch, fake_encoder, fake_reranker):
-    """answer()'s retriever must still build (and later degrade to raw chunks
-    inside gather_studies) rather than raising when there's no reachable graph."""
+def test_shared_neo4j_driver_degrades_to_none_without_config(monkeypatch):
+    """Real code path: the demo graph must not crash just because
+    NEO4J_PASSWORD is unset -- it should degrade, not raise."""
     import kgqa.service as service
 
-    monkeypatch.delenv("ARANGO_PASS", raising=False)
-    service._DB_CACHE.clear()
+    monkeypatch.delenv("NEO4J_PASSWORD", raising=False)
+    service._NEO4J_DRIVER_CACHE.clear()
+
+    driver = service._shared_neo4j_driver()
+
+    assert driver is None
+    assert service._NEO4J_DRIVER_CACHE[None] is None  # cached, not retried
+
+
+def test_get_retriever_builds_when_neo4j_unavailable(monkeypatch, fake_encoder, fake_reranker):
+    """answer()'s retriever must still build (and later degrade to raw chunks
+    inside gather_studies) rather than raising when the demo graph is
+    unreachable."""
+    import kgqa.service as service
+
+    monkeypatch.delenv("NEO4J_PASSWORD", raising=False)
+    service._NEO4J_DRIVER_CACHE.clear()
     service._STORE_CACHE.clear()
     service._RETRIEVER_CACHE.clear()
     monkeypatch.setattr(service, "_shared_encoder", lambda: fake_encoder)
@@ -90,7 +105,7 @@ def test_get_retriever_builds_when_arango_unavailable(monkeypatch, fake_encoder,
 
     retriever = service._get_retriever("demo")
 
-    assert retriever.db is None
+    assert retriever.driver is None
     candidates = retriever._select("aspirin")
     studies = retriever.gather_studies(candidates)  # degrades instead of raising
     assert studies == [(c.paper_key, c.text) for c in candidates]

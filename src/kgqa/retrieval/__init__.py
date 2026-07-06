@@ -2,6 +2,7 @@
 
 from .base import BaseRetriever, Candidate, ChunkStore
 from .graph import GraphRetriever
+from .neo4j_graph import Neo4jGraphRetriever
 from .plain import PlainRetriever
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "Candidate",
     "PlainRetriever",
     "GraphRetriever",
+    "Neo4jGraphRetriever",
 ]
