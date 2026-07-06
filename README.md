@@ -180,6 +180,7 @@ a persistent ArangoDB. See [app/README.md](app/README.md) for details.
 Seeded random sample of **n = 200** PubMedQA `pqa_labeled` questions (seed 42,
 identical across arms), `deepseek-r1:8b` via Ollama on an A100. Regenerate with
 `scripts/compare.py` (writes `results/summary.md` and `results/ablation.png`).
+Canonical numbers (and the honest write-up) live in [RESULTS.md](RESULTS.md).
 
 | Arm | Accuracy | Macro F1 | Avg latency | Adds |
 | --- | --- | --- | --- | --- |
