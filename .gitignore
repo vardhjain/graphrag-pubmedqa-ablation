@@ -32,3 +32,4 @@ Plain_RAG/pubmed_rag_data.pkl
 .ruff_cache/
 .coverage
 htmlcov/
+.claude/
