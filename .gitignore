@@ -33,3 +33,6 @@ Plain_RAG/pubmed_rag_data.pkl
 .coverage
 htmlcov/
 .claude/
+
+.vercel
+.env*
