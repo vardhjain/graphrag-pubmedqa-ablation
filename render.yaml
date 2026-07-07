@@ -31,9 +31,12 @@ services:
         value: "false"
       - key: CORS_ORIGINS
         # localhost:3123 is this project's own dev port (see .claude/launch.json);
-        # localhost:3000 is plain `npm run dev`'s default. Update/add the Vercel
-        # URL once the frontend is deployed, or its requests will be CORS-blocked.
-        value: http://localhost:3000,http://localhost:3123
+        # localhost:3000 is plain `npm run dev`'s default; the vercel.app URL is
+        # the deployed frontend (frontend/, Vercel project "graphrag-pubmedqa-ablation").
+        # NOTE: Render doesn't auto-sync this plain `value:` field from render.yaml
+        # on an existing service -- mirror any change here into the dashboard's
+        # Environment tab by hand too.
+        value: http://localhost:3000,http://localhost:3123,https://graphrag-pubmedqa-ablation.vercel.app
       - key: GROQ_API_KEY
         sync: false
       - key: GEMINI_API_KEY
