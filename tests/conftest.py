@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pytest
+
+
+def _stable_hash(token: str) -> int:
+    """int(hash(token)) but stable across processes/runs -- unlike the builtin
+    ``hash()``, which is salted per-process (PYTHONHASHSEED) and made these
+    fixtures' vectors, and therefore ranking-dependent test assertions, flaky."""
+    return int.from_bytes(hashlib.md5(token.encode()).digest()[:8], "little")
 
 
 class FakeEncoder:
@@ -18,7 +27,7 @@ class FakeEncoder:
         vecs = np.zeros((len(items), self.dim), dtype=np.float32)
         for i, t in enumerate(items):
             for token in str(t).lower().split():
-                vecs[i, hash(token) % self.dim] += 1.0
+                vecs[i, _stable_hash(token) % self.dim] += 1.0
         if normalize_embeddings:
             norms = np.linalg.norm(vecs, axis=1, keepdims=True)
             norms[norms == 0] = 1.0
