@@ -9,10 +9,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Live Demo](https://img.shields.io/badge/Streamlit-Live%20Demo-FF4B4B?logo=streamlit&logoColor=white)](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)
+[![Live Demo](https://img.shields.io/badge/Vercel-Live%20Demo-000000?logo=vercel&logoColor=white)](https://graphrag-pubmedqa-ablation.vercel.app)
+[![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)
 [![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
-[**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
+[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
 
 Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
 
@@ -45,11 +46,18 @@ you can tell a real effect from noise.
 
 ## Hosted agent
 
-Beyond the research ablation above, [`backend/`](backend/) (FastAPI) and
-[`frontend/`](frontend/) (Next.js) turn the winning `graph` arm into a live
-chat agent with a reasoning-path visualization and a `/benchmark` dashboard.
-See [`backend/README.md`](backend/README.md) and
+**[▶ graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)** —
+a live chat agent (Next.js + FastAPI) that turns the winning `graph` arm into
+something you can actually ask questions to, with a reasoning-path
+visualization of the graph traversal behind each answer. Backend is
+[`backend/`](backend/) on Render; frontend is [`frontend/`](frontend/) on
+Vercel. See [`backend/README.md`](backend/README.md) and
 [`frontend/README.md`](frontend/README.md) for setup and deployment.
+
+The backend free-tier instance sleeps after ~15 min idle -- the first request
+after a gap can take 30-150s to wake up and answer; a keep-warm cron
+([`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml)) limits
+how often that happens.
 
 **Scope limit:** the hosted demo's graph (`graph_id="demo"`) runs on Neo4j
 AuraDB Free, seeded with only the PubMedQA **labeled split (1,000 papers)**
@@ -164,11 +172,20 @@ once, then [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb) (set
 
 ## ▶ Live demo
 
-**[▶ Open the results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — an
-interactive Streamlit dashboard of the 4-arm ablation: headline accuracy, the
-paired McNemar significance tests, latency, and (when raw results are present)
-per-class confusion matrices. No setup, no login — it reads the committed
-`results/` artifacts, so it needs no LLM, database, or GPU.
+**[▶ graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)** —
+the hosted chat agent described above: ask a biomedical question, get an
+answer grounded in retrieved PubMed abstracts with the graph traversal behind
+it visualized. This is the interactive demo; see [Hosted agent](#hosted-agent)
+for how it's built and deployed.
+
+![GraphRAG chat interface](assets/chat.png)
+
+**[📊 Results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — a
+separate, static Streamlit dashboard of the 4-arm ablation itself: headline
+accuracy, the paired McNemar significance tests, latency, and (when raw
+results are present) per-class confusion matrices. No setup, no login — it
+reads the committed `results/` artifacts, so it needs no LLM, database, or
+GPU.
 
 [![Results dashboard](assets/dashboard.png)](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)
 
@@ -179,19 +196,18 @@ pip install -r app/requirements.txt
 make dashboard            # or: streamlit run app/dashboard.py
 ```
 
-**Chat demo** — a Gradio assistant that answers from the graph and cites PubMed
-IDs (the winning `graph` arm). It's a *live* pipeline that needs a reachable
-ArangoDB + Ollama, so run it yourself (best on a GPU Colab):
+There's also a standalone Gradio chat script ([app/chat_app.py](app/chat_app.py))
+that talks directly to the benchmarked ArangoDB pipeline rather than the
+hosted Neo4j demo agent above -- useful for querying the full ~62k-paper
+corpus, but needs a reachable ArangoDB + Ollama, so run it yourself (best on
+a GPU Colab):
 
 ```bash
 pip install -r requirements-app.txt
 python app/chat_app.py --share        # public Gradio link
 ```
 
-![GraphRAG chat interface](assets/chat.png)
-
-A hosted always-on chat isn't provided on purpose — it would need a paid GPU and
-a persistent ArangoDB. See [app/README.md](app/README.md) for details.
+See [app/README.md](app/README.md) for details.
 
 ---
 
