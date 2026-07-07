@@ -1,8 +1,14 @@
 import type { QueryRequest, QueryResponse } from "./types";
 
-// Render free tier cold-starts in ~30-50s after idling; give it real headroom
-// instead of failing a legitimate cold start.
-const REQUEST_TIMEOUT_MS = 60_000;
+// Render free tier cold-starts in ~30-50s after idling, and the backend's
+// sync FastAPI route keeps running to completion server-side even after the
+// client gives up waiting -- so a too-short timeout here doesn't just show
+// a premature error, it encourages retrying while the abandoned first
+// request is still consuming memory, which can crash the free-tier instance
+// via two requests' worth of retrieval+LLM work running at once. Observed
+// worst case (cold start, no reranker, Gemini synthesis) is ~190s; give it
+// real headroom.
+const REQUEST_TIMEOUT_MS = 200_000;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
