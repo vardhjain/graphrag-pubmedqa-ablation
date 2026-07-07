@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
 from dataclasses import dataclass, field
 
 from .config import ArangoConfig, Neo4jConfig
@@ -38,13 +39,29 @@ _RERANKER = None
 _CACHE_DIR = os.environ.get("KGQA_CACHE_DIR", os.path.join(tempfile.gettempdir(), "kgqa_cache"))
 os.makedirs(_CACHE_DIR, exist_ok=True)
 
+# FastAPI runs sync `def` routes (like /query) in a thread pool, so concurrent
+# requests during a cold start were racing these lazy-singleton loaders:
+# two threads could both see e.g. `_ENCODER is None` and both call
+# `load_encoder()`, transiently doubling memory right when it's tightest (see
+# the Render OOM fix above) and crashing the worker mid-request for whichever
+# request lost the race. One lock per cache + double-checked locking fixes
+# the race while keeping the fast (already-loaded) path lock-free.
+_ENCODER_LOCK = threading.Lock()
+_RERANKER_LOCK = threading.Lock()
+_ARANGO_LOCK = threading.Lock()
+_NEO4J_LOCK = threading.Lock()
+_STORE_LOCK = threading.Lock()
+_RETRIEVER_LOCK = threading.Lock()
+
 
 def _shared_encoder():
     global _ENCODER
     if _ENCODER is None:
-        from .models import load_encoder
+        with _ENCODER_LOCK:
+            if _ENCODER is None:
+                from .models import load_encoder
 
-        _ENCODER = load_encoder()
+                _ENCODER = load_encoder()
     return _ENCODER
 
 
@@ -59,9 +76,11 @@ def _shared_reranker():
     """
     global _RERANKER
     if _RERANKER is None and os.environ.get("KGQA_SKIP_RERANKER", "").lower() != "true":
-        from .models import load_reranker
+        with _RERANKER_LOCK:
+            if _RERANKER is None:
+                from .models import load_reranker
 
-        _RERANKER = load_reranker()
+                _RERANKER = load_reranker()
     return _RERANKER
 
 
@@ -77,14 +96,18 @@ def _shared_db(graph_id: str):
     hard-crashing when no graph is available.
     """
     if graph_id not in _ARANGO_DB_CACHE:
-        from .models import connect_arango
+        with _ARANGO_LOCK:
+            if graph_id not in _ARANGO_DB_CACHE:
+                from .models import connect_arango
 
-        try:
-            _ARANGO_DB_CACHE[graph_id] = connect_arango(ArangoConfig(db_name=graph_id), max_retries=1)
-        except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
-            print(f"[GraphRAG] ArangoDB unavailable for graph_id={graph_id!r} ({exc}). "
-                  "Falling back to ungraphed retrieval.")
-            _ARANGO_DB_CACHE[graph_id] = None
+                try:
+                    _ARANGO_DB_CACHE[graph_id] = connect_arango(
+                        ArangoConfig(db_name=graph_id), max_retries=1
+                    )
+                except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
+                    print(f"[GraphRAG] ArangoDB unavailable for graph_id={graph_id!r} ({exc}). "
+                          "Falling back to ungraphed retrieval.")
+                    _ARANGO_DB_CACHE[graph_id] = None
     return _ARANGO_DB_CACHE[graph_id]
 
 
@@ -99,14 +122,16 @@ def _shared_neo4j_driver():
     already degrades to raw retrieved chunks when its driver calls fail.
     """
     if None not in _NEO4J_DRIVER_CACHE:
-        from .models import connect_neo4j
+        with _NEO4J_LOCK:
+            if None not in _NEO4J_DRIVER_CACHE:
+                from .models import connect_neo4j
 
-        try:
-            _NEO4J_DRIVER_CACHE[None] = connect_neo4j(Neo4jConfig(), max_retries=1)
-        except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
-            print(f"[GraphRAG] Neo4j unavailable for the demo graph ({exc}). "
-                  "Falling back to ungraphed retrieval.")
-            _NEO4J_DRIVER_CACHE[None] = None
+                try:
+                    _NEO4J_DRIVER_CACHE[None] = connect_neo4j(Neo4jConfig(), max_retries=1)
+                except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
+                    print(f"[GraphRAG] Neo4j unavailable for the demo graph ({exc}). "
+                          "Falling back to ungraphed retrieval.")
+                    _NEO4J_DRIVER_CACHE[None] = None
     return _NEO4J_DRIVER_CACHE[None]
 
 
@@ -142,27 +167,31 @@ def _get_store(graph_id: str) -> ChunkStore:
     if graph_id in _STORE_CACHE:
         return _STORE_CACHE[graph_id]
 
-    encoder = _shared_encoder()
-    if graph_id == _DEMO_GRAPH_ID:
-        driver = _shared_neo4j_driver()
-        if driver is not None:
-            cache_file = os.path.join(_CACHE_DIR, "demo_neo4j_vectors.pkl")
-            store = ChunkStore.from_neo4j(driver, cache_file=cache_file)
+    with _STORE_LOCK:
+        if graph_id in _STORE_CACHE:
+            return _STORE_CACHE[graph_id]
+
+        encoder = _shared_encoder()
+        if graph_id == _DEMO_GRAPH_ID:
+            driver = _shared_neo4j_driver()
+            if driver is not None:
+                cache_file = os.path.join(_CACHE_DIR, "demo_neo4j_vectors.pkl")
+                store = ChunkStore.from_neo4j(driver, cache_file=cache_file)
+            else:
+                print("[GraphRAG] No Neo4j for the demo graph; encoding the labeled "
+                      "split locally as a bounded fallback (this is slow -- not for production).")
+                store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
         else:
-            print("[GraphRAG] No Neo4j for the demo graph; encoding the labeled "
-                  "split locally as a bounded fallback (this is slow -- not for production).")
-            store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
-    else:
-        db = _shared_db(graph_id)
-        if db is not None:
-            cache_file = os.path.join(_CACHE_DIR, f"{graph_id}_vectors.pkl")
-            store = ChunkStore.from_arango(db, cache_file=cache_file)
-        else:
-            print(f"[GraphRAG] No ArangoDB for graph_id={graph_id!r}; encoding the labeled "
-                  "split locally as a bounded fallback (this is slow -- not for production).")
-            store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
-    _STORE_CACHE[graph_id] = store
-    return store
+            db = _shared_db(graph_id)
+            if db is not None:
+                cache_file = os.path.join(_CACHE_DIR, f"{graph_id}_vectors.pkl")
+                store = ChunkStore.from_arango(db, cache_file=cache_file)
+            else:
+                print(f"[GraphRAG] No ArangoDB for graph_id={graph_id!r}; encoding the labeled "
+                      "split locally as a bounded fallback (this is slow -- not for production).")
+                store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
+        _STORE_CACHE[graph_id] = store
+        return store
 
 
 def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever | Neo4jGraphRetriever:
@@ -170,19 +199,23 @@ def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever 
     if key in _RETRIEVER_CACHE:
         return _RETRIEVER_CACHE[key]
 
-    store = _get_store(graph_id)
-    if graph_id == _DEMO_GRAPH_ID:
-        retriever = Neo4jGraphRetriever(
-            store, _shared_encoder(), _shared_neo4j_driver(),
-            reranker=_shared_reranker(), use_concepts=use_concepts,
-        )
-    else:
-        retriever = GraphRetriever(
-            store, _shared_encoder(), _shared_db(graph_id),
-            reranker=_shared_reranker(), use_concepts=use_concepts,
-        )
-    _RETRIEVER_CACHE[key] = retriever
-    return retriever
+    with _RETRIEVER_LOCK:
+        if key in _RETRIEVER_CACHE:
+            return _RETRIEVER_CACHE[key]
+
+        store = _get_store(graph_id)
+        if graph_id == _DEMO_GRAPH_ID:
+            retriever = Neo4jGraphRetriever(
+                store, _shared_encoder(), _shared_neo4j_driver(),
+                reranker=_shared_reranker(), use_concepts=use_concepts,
+            )
+        else:
+            retriever = GraphRetriever(
+                store, _shared_encoder(), _shared_db(graph_id),
+                reranker=_shared_reranker(), use_concepts=use_concepts,
+            )
+        _RETRIEVER_CACHE[key] = retriever
+        return retriever
 
 
 def _build_reasoning_path(candidates, studies: list[tuple[str, str]]) -> list[dict]:
