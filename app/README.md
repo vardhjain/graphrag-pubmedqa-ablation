@@ -33,9 +33,13 @@ streamlit run app/dashboard.py
 
 ### Deploy to Streamlit Community Cloud (free, always-on)
 
-The dashboard is the project's hosted demo. `app/requirements.txt` sits next to
-the entrypoint so Streamlit Cloud installs only the light deps (it searches the
-entrypoint's directory before the heavy root `requirements.txt`).
+This dashboard is the project's **results dashboard** -- a static view of the
+committed benchmark artifacts, separate from the interactive chat agent
+hosted at [graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)
+(see the root README's [Hosted agent](../README.md#hosted-agent) section).
+`app/requirements.txt` sits next to the entrypoint so Streamlit Cloud installs
+only the light deps (it searches the entrypoint's directory before the heavy
+root `requirements.txt`).
 
 1. Push these to `main`: `app/dashboard.py`, `app/requirements.txt`,
    `.streamlit/config.toml`, and the `results/` artifacts.
@@ -45,8 +49,8 @@ entrypoint's directory before the heavy root `requirements.txt`).
    **Main file path `app/dashboard.py`**.
 5. (Optional) Advanced settings → Python 3.11. Set a custom subdomain (e.g.
    `kgqa-ablation`) for a clean URL, or accept the auto-generated one.
-6. **Deploy.** Copy the final `*.streamlit.app` URL and point the badge +
-   "Live demo" link in the root README at it.
+6. **Deploy.** Copy the final `*.streamlit.app` URL and point the "Results
+   dashboard" badge/link in the root README at it.
 
 > Tip: commit the per-sample `results/{arm}_results.json` files too (if you still
 > have them from the benchmark run) to light up the confusion-matrix section.

@@ -1,7 +1,7 @@
 ---
 ---
 
-[**▶ Live demo**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/graphrag-pubmedqa-ablation) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)
+[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/graphrag-pubmedqa-ablation) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)
 
 ## What this is
 
@@ -34,6 +34,7 @@ context, not by *broadening* it.
 
 ## Explore
 
-- **[Live results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — interactive bars, significance tests, per-class breakdown
+- **[Live demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask the hosted `graph`-arm chat agent a biomedical question directly
+- **[Results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — interactive bars, significance tests, per-class breakdown
 - **[Source code & README](https://github.com/vardhjain/graphrag-pubmedqa-ablation)** — package, scripts, tests, CI
 - **[Project report (PDF)](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf)** and **[slides](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)**
