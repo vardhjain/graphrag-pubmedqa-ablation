@@ -10,10 +10,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Live Demo](https://img.shields.io/badge/Vercel-Live%20Demo-000000?logo=vercel&logoColor=white)](https://graphrag-pubmedqa-ablation.vercel.app)
-[![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)
+[![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 [![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
-[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
+[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
 
 Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
 
@@ -180,14 +180,14 @@ for how it's built and deployed.
 
 ![GraphRAG chat interface](assets/chat.png)
 
-**[📊 Results dashboard](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)** — a
+**[📊 Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** — a
 separate, static Streamlit dashboard of the 4-arm ablation itself: headline
 accuracy, the paired McNemar significance tests, latency, and (when raw
 results are present) per-class confusion matrices. No setup, no login — it
 reads the committed `results/` artifacts, so it needs no LLM, database, or
 GPU.
 
-[![Results dashboard](assets/dashboard.png)](https://vardhjain-knowledge-graph-question-answerin-appdashboard-hkwi57.streamlit.app)
+[![Results dashboard](assets/dashboard.png)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 
 Run the dashboard locally:
 
