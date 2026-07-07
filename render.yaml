@@ -30,9 +30,10 @@ services:
       - key: TOKENIZERS_PARALLELISM
         value: "false"
       - key: CORS_ORIGINS
-        # Placeholder until the Phase 3 frontend is deployed -- update this to
-        # the Vercel URL then, or the frontend's requests will be CORS-blocked.
-        value: http://localhost:3000
+        # localhost:3123 is this project's own dev port (see .claude/launch.json);
+        # localhost:3000 is plain `npm run dev`'s default. Update/add the Vercel
+        # URL once the frontend is deployed, or its requests will be CORS-blocked.
+        value: http://localhost:3000,http://localhost:3123
       - key: GROQ_API_KEY
         sync: false
       - key: GEMINI_API_KEY
