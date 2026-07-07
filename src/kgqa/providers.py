@@ -26,7 +26,7 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_API_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 )
@@ -62,7 +62,10 @@ def call_gemini(prompt: str, system: str = "", temperature: float = LLM_TEMPERAT
         },
         timeout=60,
     )
-    resp.raise_for_status()
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(f"Gemini {resp.status_code}: {resp.text[:500]}") from exc
     return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 
