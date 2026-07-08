@@ -17,6 +17,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -26,6 +27,8 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="GraphRAG hosted agent",
@@ -79,7 +82,8 @@ def query(req: QueryRequest) -> dict:
     try:
         return answer(req.question, graph_id=req.graph_id, use_concepts=req.use_concepts)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Answering failed: {exc}") from exc
+        logger.exception("Answering failed for graph_id=%r", req.graph_id)
+        raise HTTPException(status_code=502, detail="Answering failed. Please try again.") from exc
 
 
 @app.post("/ingest", response_model=IngestResponse)

@@ -37,8 +37,6 @@ services:
         # on an existing service -- mirror any change here into the dashboard's
         # Environment tab by hand too.
         value: http://localhost:3000,http://localhost:3123,https://graphrag-pubmedqa-ablation.vercel.app
-      - key: GROQ_API_KEY
-        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: ARANGO_HOST

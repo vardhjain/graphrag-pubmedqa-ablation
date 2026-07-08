@@ -1,0 +1,237 @@
+# GAPS.md — honest audit of weaknesses
+
+Ordered most-important first. Each item: **what**, **where**, **why it matters**,
+**fix** (scoped to be executable as a single task). Severity is the auditor's
+call, not a formal CVSS.
+
+The codebase is genuinely well-built — small, cohesive, tested where it counts,
+and honest in its claims. Most items below are polish, not fires. But they're
+real.
+
+---
+
+## 1. Live Neo4j credential sits in plaintext `.env` — SECURITY (HIGH)
+
+**What:** `.env` (repo root) contains a **real, active** Neo4j AuraDB URI, user,
+and password:
+```
+NEO4J_URI=neo4j+s://fc8ef905.databases.neo4j.io
+NEO4J_USER=fc8ef905
+NEO4J_PASSWORD=I4dst4SKl2qbEYpv5JVCfO4_lao_ZMXIcRZmjbyvFT8
+```
+**Where:** `.env` (untracked — confirmed **not** in git history, and `.gitignore`
+line 18 excludes it — good). But it is a live secret readable by anything with
+disk/session access, and it has been surfaced in tooling output.
+
+**Why it matters:** These credentials grant write access to the demo graph
+database. Anyone who obtains them can read or wipe the hosted demo's data. Because
+the secret has now been exposed outside its intended store, it should be treated
+as compromised regardless of the (correct) gitignore.
+
+**Fix:**
+1. Rotate the AuraDB password in the Neo4j console; update the Render env var
+   `NEO4J_PASSWORD` and your local `.env`.
+2. Consider using `.env.local` or a secrets manager for real credentials and
+   keeping `.env` empty/placeholder like `.env.example`.
+3. Add a `detect-private-key`-style guard is already in `.pre-commit-config.yaml`;
+   confirm pre-commit is installed (`pre-commit install`) so a future secret can't
+   be committed by accident.
+
+---
+
+## 2. ~~API error responses leak internal exception text~~ — FIXED
+
+**What it was:** `/query` returned `detail=f"Answering failed: {exc}"` to the
+client. **Fixed:** `backend/main.py`'s `query()` now logs the full exception
+server-side via `logger.exception(...)` and returns a generic
+`"Answering failed. Please try again."` detail; `backend/test_main.py` asserts
+the raw exception text is no longer in the response body. `/ingest`'s
+`dataset_id` echo was already just reflecting client-supplied input against a
+known-safe allowlist, not leaking server internals, so left as-is.
+
+---
+
+## 3. ~~Zero test coverage for `compare.py`'s pairing logic~~ — PARTIALLY FIXED
+
+**What it was:** No test caught a regression in `compare.py:aligned()`, the
+index-alignment logic that pairs two arms' predictions by id before every
+McNemar test — i.e. every published significance number. **Fixed:** added
+`tests/test_compare.py` (4 cases: matched ids, shuffled ids, partially
+overlapping ids, missing-`ids`-key positional fallback), run via the existing
+`pythonpath = ["src", "."]` pytest config so `scripts.compare` imports
+directly without touching `testpaths`.
+
+**Still open:** `scripts/run_benchmark.py` (retry/health-check/checkpoint
+logic) and `scripts/ingest.py` / `scripts/ingest_neo4j.py` remain untested —
+they need a live Ollama/DB to exercise meaningfully, so covering them is a
+separate, larger task (mocking the health-check/restart branches) rather than
+a one-file addition.
+
+---
+
+## 4. ~~`decompose` / `extract` provider tasks defined but never called~~ — FIXED
+
+**What it was:** `providers._CHAINS` defined `decompose`/`extract`/`synthesize`
+tasks with Groq→Ollama chains, but only `synthesize` was ever invoked —
+aspirational scaffolding that read as implemented. **Fixed (option a, delete):**
+removed `call_groq`, `GROQ_API_KEY`/`GROQ_MODEL`/`GROQ_API_URL`, and the
+`decompose`/`extract` chain entries from `src/kgqa/providers.py`; trimmed the
+module docstring to describe only the `synthesize` task. Removed the now-dead
+`GROQ_API_KEY` env var from `render.yaml` and `backend/README.md`, and the
+corresponding Groq-specific tests from `tests/test_providers.py` (the
+provider-chain-fallback tests were repointed at `gemini`/`ollama`, the tasks
+that actually exist).
+
+---
+
+## 5. ~~`.env.example` pins a deprecated Gemini model~~ — FIXED
+
+**What it was:** `.env.example` set `GEMINI_MODEL=gemini-1.5-flash` while
+`providers.py` defaulted to `gemini-2.5-flash`, so following the README's
+`cp .env.example .env` would silently override the good default. **Fixed:**
+`.env.example` now matches (`gemini-2.5-flash`).
+
+---
+
+## 6. ~~Repository name inconsistent across the codebase~~ — FIXED
+
+**What it was:** `pyproject.toml`'s Homepage/Repository/Issues URLs and two
+frontend RESULTS.md links (`frontend/app/page.tsx`,
+`frontend/app/benchmark/page.tsx`) still pointed at the old
+`vardhjain/Knowledge_Graph_Question_Answering` slug while everything else
+(git remote, README, dashboard) had moved to
+`vardhjain/graphrag-pubmedqa-ablation`. **Fixed:** all three files repointed to
+the canonical slug. Since the frontend is now deployed, these were live links
+on the production `/benchmark` and home pages, not just repo metadata.
+
+---
+
+## 7. ~~`frontend/.env.local` points at the wrong backend port~~ — RESOLVED (stale entry)
+
+**Re-verified 2026-07-08:** `frontend/.env.local` now points at the deployed
+Render backend (`NEXT_PUBLIC_API_URL=https://graphrag-agent-api.onrender.com`),
+not the stale `:8123`. This was superseded by the "Point frontend at the
+deployed Render backend" commit — the audit entry was simply out of date.
+Leaving this item as a record that the local-env-drift class of bug is worth
+re-checking after any port/deploy-target change, since `.env.local` is
+gitignored and can't be caught by CI.
+
+---
+
+## 8. ~~CORS default blocks the real frontend~~ — RESOLVED (stale entry)
+
+**Re-verified 2026-07-08:** `render.yaml`'s `CORS_ORIGINS` now includes the
+deployed Vercel origin (`https://graphrag-pubmedqa-ablation.vercel.app`)
+alongside the local dev ports, per the "Add deployed Vercel frontend URL to
+backend CORS allowlist" commit. Note the file's own comment: Render doesn't
+auto-sync this field for an *existing* service from a `render.yaml` diff, so
+confirm the dashboard's Environment tab matches after any future change here.
+
+---
+
+## 9. Duplicated graph-retrieval logic across two backends — TECH DEBT (LOW-MEDIUM)
+
+**What:** `GraphRetriever` (ArangoDB, `graph.py`) and `Neo4jGraphRetriever`
+(`neo4j_graph.py`) have near-identical `gather_studies` bodies (parent expansion +
+optional concept hop + same degrade-to-raw-chunks fallback). The two also compute
+"shared concept count" with subtly different semantics — AQL `COLLECT … WITH COUNT`
+vs Cypher `count(DISTINCT concept)`.
+
+**Where:** `src/kgqa/retrieval/graph.py:105-124` vs
+`src/kgqa/retrieval/neo4j_graph.py:82-99`; concept queries at `graph.py:41-63`
+(`_CONCEPT_AQL`) vs `neo4j_graph.py:34-46` (`_CONCEPT_CYPHER`).
+
+**Why it matters:** Two copies drift. The concept-count divergence means the two
+backends can rank concept-neighbours differently — and since the Neo4j demo's
+concept-hop path is **never benchmarked**, a divergence would go unnoticed. Any
+future fix to expansion logic must be applied twice, correctly.
+
+**Fix:** Lift the shared `gather_studies` control flow (parent → seed keys →
+optional concept hop → fallback) into `BaseRetriever` or a small mixin, leaving
+each subclass to implement only `_parent_abstracts` / `_concept_neighbours`. Keep
+the two DB queries but make the orchestration single-sourced. Add a comment
+documenting the intended concept-count semantics so both queries match.
+
+---
+
+## 10. Broad `except Exception` swallows failures silently — ROBUSTNESS (LOW)
+
+**What:** Several `except Exception` blocks degrade silently via `print()` only —
+graph expansion failure, provider failures, DB connection failure. Real bugs
+(e.g. a malformed AQL, a typo in a bind var) look identical to an expected
+"DB unreachable" degrade and are hidden behind raw-chunk fallback.
+
+**Where:** `src/kgqa/retrieval/graph.py:121`;
+`src/kgqa/retrieval/neo4j_graph.py:96`; `src/kgqa/service.py:84,106`;
+`src/kgqa/providers.py:105`.
+
+**Why it matters:** On the benchmark path especially, a silent degrade to raw
+chunks would quietly *lower accuracy* while the run still "succeeds" — the graph
+arm would produce plain-arm numbers with no loud signal. The `print` is easy to
+miss in a 200-question log.
+
+**Fix:** Narrow the catches where the failure mode is known (e.g. arango/neo4j
+connection exceptions) so unexpected errors propagate; or at minimum, in
+`run_benchmark.py`, count and report how many questions fell back to raw chunks at
+the end of the run so a mass-degrade is visible.
+
+---
+
+## 11. AQL built with f-string interpolation — FRAGILE PATTERN (LOW / informational)
+
+**What:** `ChunkStore.from_arango` builds AQL by interpolating `{collection}`,
+`{offset}`, `{batch}` into the query string; `ingest.py` similar. None of these
+are user-controlled (all internal constants/ints), so this is **not** an injection
+vulnerability today.
+
+**Where:** `src/kgqa/retrieval/base.py:100-106`.
+
+**Why it matters:** The pattern is a landmine if a future change ever routes
+user/dataset input into one of these fields (e.g. a per-dataset collection name
+from `/ingest`). It reads as "we interpolate into AQL here" which invites copying.
+
+**Fix:** Use ArangoDB bind parameters for the values (`@offset`, `@batch`) and, if
+collection names ever become dynamic, validate them against a known allowlist
+rather than interpolating. Low priority while inputs stay internal.
+
+---
+
+## 12. `service.answer` reaches into retriever private methods — COUPLING (LOW)
+
+**What:** `service.answer` calls `retriever._select(question)` and
+`retriever.gather_studies(...)` directly (the leading underscore marks `_select`
+as private). It re-implements the retrieve→answer flow instead of using the
+public `retrieve()` / `answer_benchmark()` / `chat()` surface, because it needs
+the intermediate `candidates` and `studies` to build `reasoning_path`.
+
+**Where:** `src/kgqa/service.py:222-224`.
+
+**Why it matters:** Refactoring `BaseRetriever._select`'s signature silently
+breaks the service with no type error. The private-method reach is a smell that
+the public interface is missing a "retrieve and return the intermediates" method.
+
+**Fix:** Add a public `BaseRetriever.select(query) -> list[Candidate]` (or a
+`retrieve_with_trace()` returning candidates + context) and have `service.answer`
+use it. Keep `_select` as the internal implementation.
+
+---
+
+## 13. Minor inconsistencies and polish — LOW / trivial
+
+- **`frontend/README.md`** is untouched `create-next-app` boilerplate — says
+  nothing about this project, the API contract, or `NEXT_PUBLIC_API_URL`. Replace
+  with a few lines describing the chat + benchmark pages and the env var.
+- **`FakeEncoder` uses Python `hash()`** (`tests/conftest.py:22`), which is
+  salted per-process. Tests pass because hashing is stable *within* a run, but
+  the vectors are meaningless across runs — fine for ranking tests, but a reader
+  may assume determinism that isn't there. A comment would help.
+- **`FuzzyEvaluator` defaults unparseable output to `"maybe"`**
+  (`evaluation.py:27,51`). This is a documented, deliberate choice, but it biases
+  errors toward the rare `maybe` class and can flatter/penalize an arm depending
+  on failure rate. Worth a one-line note in RESULTS.md's methodology.
+- **No `.dockerignore`** — `docker compose` only runs ArangoDB (no app image), so
+  low impact, but if an app Dockerfile is ever added, `.next/`, `node_modules/`,
+  and `__pycache__/` will bloat the build context.
+- **`pkill`-based Ollama restart** (`scripts/run_benchmark.py:55`) is a no-op on
+  Windows. Documented in a comment, but the benchmark is effectively
+  Linux/Colab-only. Fine given the design, worth stating in CLAUDE.md (it is).
