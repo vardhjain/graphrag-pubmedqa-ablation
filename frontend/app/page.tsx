@@ -18,7 +18,7 @@ export default function Home() {
           accuracy +22.5pp over a reranked baseline (McNemar p&lt;0.0001) --
           see{" "}
           <a
-            href="https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/RESULTS.md"
+            href="https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md"
             target="_blank"
             rel="noreferrer"
             className="text-blue-600 hover:underline"

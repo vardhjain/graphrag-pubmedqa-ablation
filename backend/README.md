@@ -49,8 +49,8 @@ graph's accuracy lift.
 
 [`render.yaml`](../render.yaml) at the repo root is a Render Blueprint --
 connect the repo on Render and it's picked up automatically. Set the secret
-env vars (`NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `GROQ_API_KEY`,
-`GEMINI_API_KEY`, `CORS_ORIGINS`) in the Render dashboard; `ARANGO_*` vars
+env vars (`NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `GEMINI_API_KEY`,
+`CORS_ORIGINS`) in the Render dashboard; `ARANGO_*` vars
 are only needed if you also want `/ingest` to build real ArangoDB-backed
 datasets. Nothing else to configure.
 

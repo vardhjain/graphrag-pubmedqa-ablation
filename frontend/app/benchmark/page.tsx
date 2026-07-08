@@ -34,7 +34,7 @@ export default function BenchmarkPage() {
             <code className="text-xs bg-gray-100 px-1 rounded">{summary.model}</code>. Numbers
             pulled directly from{" "}
             <a
-              href="https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/RESULTS.md"
+              href="https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md"
               target="_blank"
               rel="noreferrer"
               className="text-blue-600 hover:underline"
@@ -146,7 +146,7 @@ export default function BenchmarkPage() {
             significance against the plain graph arm (p=0.69) and costs ~5x the latency, so it is
             not the recommended arm to ship. See{" "}
             <a
-              href="https://github.com/vardhjain/Knowledge_Graph_Question_Answering/blob/main/RESULTS.md"
+              href="https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md"
               target="_blank"
               rel="noreferrer"
               className="text-blue-600 hover:underline"

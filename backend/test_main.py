@@ -58,7 +58,8 @@ def test_query_failure_returns_502(monkeypatch):
 
     resp = client.post("/query", json={"question": "does aspirin help?"})
     assert resp.status_code == 502
-    assert "no providers available" in resp.json()["detail"]
+    assert resp.json()["detail"] == "Answering failed. Please try again."
+    assert "no providers available" not in resp.json()["detail"]
 
 
 def test_ingest_known_dataset_returns_graph_id():
