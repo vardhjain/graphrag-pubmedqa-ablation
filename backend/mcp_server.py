@@ -2,8 +2,9 @@
 
 Exposes the same ``graphrag.answer()`` the REST ``/query`` route calls, as an
 MCP tool -- so any MCP client (Claude Code, Claude Desktop, Cursor, ...) can
-use this agent by adding one URL, no code required. Mounted at ``/mcp`` in
-``backend/main.py``.
+use this agent by adding one URL, no code required. Its route is merged
+directly into the FastAPI app in ``backend/main.py`` (not ``app.mount()`` --
+see the comment there for why).
 
 Stateless HTTP mode: this is a public, unauthenticated demo with no per-user
 state to track, so every request is handled independently with no session
@@ -26,7 +27,6 @@ mcp = FastMCP(
         "while it wakes up; subsequent calls take ~15-20 seconds."
     ),
     stateless_http=True,
-    streamable_http_path="/",
     # The SDK's default DNS-rebinding Host-header allowlist targets servers
     # meant to be bound to localhost and reached only from same-origin browser
     # code. This server is the opposite: a public HTTPS API meant to be hit

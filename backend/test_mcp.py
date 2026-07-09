@@ -59,16 +59,12 @@ async def test_mcp_round_trip_over_asgi(monkeypatch):
     )
 
     def http_client_factory(headers=None, timeout=None, auth=None):
-        # Mounting the MCP sub-app's own "/" route at "/mcp" makes a bare
-        # "/mcp" request 307-redirect to "/mcp/" -- real MCP clients always
-        # follow redirects (see create_mcp_http_client), so match that here.
         return httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://localhost",  # mcp's DNS-rebinding guard allows this Host
             headers=headers,
             timeout=timeout or 30,
             auth=auth,
-            follow_redirects=True,
         )
 
     # ASGITransport doesn't run ASGI lifespan events on its own, so the MCP
