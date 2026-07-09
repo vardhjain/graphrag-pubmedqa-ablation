@@ -9,3 +9,7 @@ torch
 # API server
 fastapi>=0.110
 uvicorn[standard]>=0.29
+
+# MCP tool surface (mounted at /mcp) -- lets MCP clients (Claude Code, Claude
+# Desktop, Cursor, ...) use this agent as a tool via one URL.
+mcp>=1.9

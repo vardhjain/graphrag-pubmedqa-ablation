@@ -18,6 +18,38 @@ uvicorn backend.main:app --reload
 | `/health` | GET | liveness probe; also pinged by the keep-warm cron |
 | `/query` | POST | `{question, graph_id="demo", use_concepts=false}` -> `{answer, reasoning_path, sources}` |
 | `/ingest` | POST | `{dataset_id}` -> `{graph_id}`. Only preloaded dataset ids (currently `demo`) resolve; arbitrary document upload is out of scope for v1 (see the execution plan's scope warning) and returns `501`. |
+| `/mcp` | MCP (streamable HTTP) | Same `graphrag.answer()` as `/query`, exposed as an MCP tool -- see below. |
+
+## Use it as an agent (MCP)
+
+Any MCP client can use this agent as a tool by pointing at the deployed
+`/mcp` URL -- no cloning, no API key. It exposes one tool,
+`ask_pubmed_graphrag(question, use_concepts=False)`, defined in
+[`mcp_server.py`](mcp_server.py).
+
+**Claude Code:**
+```bash
+claude mcp add --transport http graphrag-pubmedqa https://graphrag-agent-api.onrender.com/mcp
+```
+
+**Claude Desktop / Cursor** (`mcpServers` config, streamable HTTP transport):
+```json
+{
+  "mcpServers": {
+    "graphrag-pubmedqa": {
+      "url": "https://graphrag-agent-api.onrender.com/mcp"
+    }
+  }
+}
+```
+
+Two things worth knowing before you rely on it:
+- **Cold start.** Render's free tier sleeps after ~15 min idle; the first tool
+  call after a gap can take 60-120s while the instance wakes up and loads the
+  vector store. Follow-up calls are ~15-20s.
+- **Unauthenticated, demo-scoped.** No auth, no rate limiting -- this is a
+  portfolio demo over the same 1,000-paper labeled-split graph described
+  below, not a production API.
 
 ## The demo graph: Neo4j, scoped to 1,000 papers
 

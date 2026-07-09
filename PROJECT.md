@@ -56,7 +56,7 @@ unfair" table in [README.md](README.md) and the audit in
 | **Hosted-demo graph DB** | **Neo4j AuraDB Free** | A *second, parallel* graph backend used **only** by the live hosted agent's `graph_id="demo"` path, scoped to the 1,000-paper labeled split so it fits a genuinely-free-forever tier. The benchmark pipeline never touches it. |
 | **Benchmark LLM** | `deepseek-r1:8b` via **Ollama** (local) | Reasoning model, deterministic (`temperature=0`), GPU-friendly on Colab. Emits `<think>…</think>` which the answer extractor strips. |
 | **Hosted-demo LLM** | **Groq / Gemini Flash**, falling back to Ollama | Free cloud inference so the hosted agent needs no GPU. A provider *chain* (see `providers.py`) survives a single provider's outage or model deprecation. |
-| **Backend** | **FastAPI** + Uvicorn | Thin JSON API (`/query`, `/ingest`, `/health`) over the `graphrag.answer()` service. Deployed on Render free tier. |
+| **Backend** | **FastAPI** + Uvicorn | Thin JSON API (`/query`, `/ingest`, `/health`) plus an MCP tool at `/mcp` (see `backend/mcp_server.py`), all over the `graphrag.answer()` service. Deployed on Render free tier. |
 | **Frontend** | **Next.js 16** (App Router, React 19) + Tailwind v4 + reactflow | Chat UI + a `/benchmark` page + an interactive reasoning-path graph. Static-generated benchmark page reads `results/summary.json` at build time. Deploys on Vercel. |
 | **Dashboard** | **Streamlit** | Zero-backend results dashboard (reads committed `results/` JSON). This is the always-on hosted demo — no LLM/DB/GPU needed. |
 | **Chat demo (alt)** | **Gradio** (`app/chat_app.py`) | A *live* local chat over the ArangoDB `graph` arm; needs Ollama + ArangoDB, so it's run-it-yourself, not hosted. |
