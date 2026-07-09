@@ -13,6 +13,7 @@ affinity required between calls.
 
 from __future__ import annotations
 
+import anyio
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -38,7 +39,7 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-def ask_pubmed_graphrag(question: str, use_concepts: bool = False) -> dict:
+async def ask_pubmed_graphrag(question: str, use_concepts: bool = False) -> dict:
     """Ask a biomedical question against the PubMedQA demo knowledge graph.
 
     Args:
@@ -55,4 +56,14 @@ def ask_pubmed_graphrag(question: str, use_concepts: bool = False) -> dict:
     """
     from graphrag import answer
 
-    return answer(question, graph_id="demo", use_concepts=use_concepts)
+    # graphrag.answer() is a blocking call (encoder load, Neo4j driver, Gemini
+    # HTTP request). FastMCP calls sync tool functions inline on the event
+    # loop with no thread offload (unlike FastAPI's route handling, which
+    # runs sync `def` routes in a thread pool automatically) -- so a plain
+    # `def` here would block the whole process, including unrelated /health
+    # and concurrent MCP requests, for the full duration of the call. This
+    # was caught live: the first real tool call on the deployed instance
+    # wedged /health for the rest of its cold-start-plus-LLM-call duration.
+    return await anyio.to_thread.run_sync(
+        lambda: answer(question, graph_id="demo", use_concepts=use_concepts)
+    )
