@@ -8,6 +8,7 @@ subclass only customises how the selected chunks become an LLM context string.
 
 from __future__ import annotations
 
+import os
 import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -33,6 +34,35 @@ def _normalize(matrix: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return matrix / norms
+
+
+def _load_vector_cache(cache_file: str) -> dict | None:
+    """Read a pickle vector cache, treating a corrupt file as a miss.
+
+    A process kill mid-write (OOM on a small host, platform restart) can leave
+    a truncated pickle at the cache path; ``pickle.load`` then raises
+    ``EOFError("Ran out of input")`` on every subsequent request, wedging the
+    service until the file is removed. Delete the bad file and rebuild instead.
+    """
+    if not os.path.exists(cache_file):
+        return None
+    try:
+        with open(cache_file, "rb") as f:
+            return pickle.load(f)
+    except Exception:
+        try:
+            os.remove(cache_file)
+        except OSError:
+            pass
+        return None
+
+
+def _dump_vector_cache(cache_file: str, payload: dict) -> None:
+    """Write the pickle cache atomically so a mid-write kill can't corrupt it."""
+    tmp = f"{cache_file}.tmp"
+    with open(tmp, "wb") as f:
+        pickle.dump(payload, f)
+    os.replace(tmp, cache_file)
 
 
 class ChunkStore:
@@ -85,14 +115,10 @@ class ChunkStore:
                     cache_file: str | None = None) -> ChunkStore:
         """Download chunk vectors from ArangoDB (with optional pickle cache)."""
         if cache_file:
-            import os
-
-            if os.path.exists(cache_file):
-                with open(cache_file, "rb") as f:
-                    data = pickle.load(f)
-                if len(data["embeddings"]):
-                    return cls(data["ids"], data["paper_keys"],
-                               data["texts"], np.asarray(data["embeddings"]))
+            data = _load_vector_cache(cache_file)
+            if data is not None and len(data["embeddings"]):
+                return cls(data["ids"], data["paper_keys"],
+                           data["texts"], np.asarray(data["embeddings"]))
 
         ids, paper_keys, texts, embeddings = [], [], [], []
         offset = 0
@@ -118,9 +144,8 @@ class ChunkStore:
 
         embeddings_np = np.asarray(embeddings, dtype=np.float32)
         if cache_file and ids:
-            with open(cache_file, "wb") as f:
-                pickle.dump({"ids": ids, "paper_keys": paper_keys,
-                             "texts": texts, "embeddings": embeddings_np}, f)
+            _dump_vector_cache(cache_file, {"ids": ids, "paper_keys": paper_keys,
+                                            "texts": texts, "embeddings": embeddings_np})
         return cls(ids, paper_keys, texts, embeddings_np)
 
     @classmethod
@@ -132,14 +157,10 @@ class ChunkStore:
         property, so this is a bulk read, not a live re-encode.
         """
         if cache_file:
-            import os
-
-            if os.path.exists(cache_file):
-                with open(cache_file, "rb") as f:
-                    data = pickle.load(f)
-                if len(data["embeddings"]):
-                    return cls(data["ids"], data["paper_keys"],
-                               data["texts"], np.asarray(data["embeddings"]))
+            data = _load_vector_cache(cache_file)
+            if data is not None and len(data["embeddings"]):
+                return cls(data["ids"], data["paper_keys"],
+                           data["texts"], np.asarray(data["embeddings"]))
 
         ids, paper_keys, texts, embeddings = [], [], [], []
         with driver.session() as session:
@@ -156,9 +177,8 @@ class ChunkStore:
 
         embeddings_np = np.asarray(embeddings, dtype=np.float32)
         if cache_file and ids:
-            with open(cache_file, "wb") as f:
-                pickle.dump({"ids": ids, "paper_keys": paper_keys,
-                             "texts": texts, "embeddings": embeddings_np}, f)
+            _dump_vector_cache(cache_file, {"ids": ids, "paper_keys": paper_keys,
+                                            "texts": texts, "embeddings": embeddings_np})
         return cls(ids, paper_keys, texts, embeddings_np)
 
 

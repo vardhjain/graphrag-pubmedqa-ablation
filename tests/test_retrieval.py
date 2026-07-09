@@ -111,3 +111,68 @@ def test_chunkstore_from_dataset_builds_corpus(monkeypatch, fake_encoder):
     assert len(store) == 2
     assert store.paper_keys == ["1", "2"]
     assert store.ids == ["Chunks/1_0", "Chunks/2_0"]
+
+
+class _BulkNeo4jSession:
+    """Session fake for ChunkStore.from_neo4j's bulk vector download."""
+
+    def __init__(self, rows):
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def run(self, query, **params):
+        return self._rows
+
+
+class _BulkNeo4jDriver:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def session(self):
+        return _BulkNeo4jSession(self._rows)
+
+
+def _bulk_rows():
+    return [
+        {"key": "1_0", "paper": "1", "text": "aspirin trial", "emb": [1.0, 0.0]},
+        {"key": "2_0", "paper": "2", "text": "statin trial", "emb": [0.0, 1.0]},
+    ]
+
+
+def test_from_neo4j_recovers_from_truncated_cache(tmp_path):
+    """A kill mid-write leaves a truncated pickle; the load must treat it as a
+    miss (delete + rebuild), not wedge every request with 'Ran out of input'."""
+    cache = tmp_path / "demo_neo4j_vectors.pkl"
+    cache.write_bytes(b"")  # what an OOM-killed write leaves behind
+
+    store = ChunkStore.from_neo4j(_BulkNeo4jDriver(_bulk_rows()), cache_file=str(cache))
+
+    assert store.ids == ["Chunks/1_0", "Chunks/2_0"]
+    # The rebuilt cache must be valid: a second load comes straight from disk.
+    again = ChunkStore.from_neo4j(_BulkNeo4jDriver([]), cache_file=str(cache))
+    assert again.ids == ["Chunks/1_0", "Chunks/2_0"]
+
+
+def test_vector_cache_write_is_atomic(tmp_path, monkeypatch):
+    """The cache is written to a temp file and renamed, so the final path never
+    holds a partial pickle even if the dump itself dies."""
+    import kgqa.retrieval.base as base
+
+    cache = tmp_path / "vectors.pkl"
+
+    def exploding_dump(payload, f):
+        f.write(b"partial")
+        raise MemoryError("simulated OOM mid-write")
+
+    monkeypatch.setattr(base.pickle, "dump", exploding_dump)
+    try:
+        ChunkStore.from_neo4j(_BulkNeo4jDriver(_bulk_rows()), cache_file=str(cache))
+    except MemoryError:
+        pass
+
+    assert not cache.exists()  # partial bytes stayed in the .tmp file, never renamed
