@@ -9,9 +9,14 @@ export default function Home() {
           <h1 className="text-lg font-semibold text-zinc-900">
             PubMed GraphRAG assistant
           </h1>
-          <Link href="/benchmark" className="text-sm text-blue-600 hover:underline">
-            View benchmark &rarr;
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/case-study" className="text-sm text-blue-600 hover:underline">
+              Case study
+            </Link>
+            <Link href="/benchmark" className="text-sm text-blue-600 hover:underline">
+              View benchmark &rarr;
+            </Link>
+          </div>
         </div>
         <p className="text-sm text-zinc-500">
           Graph-augmented retrieval over PubMedQA. Parent-document expansion lifts

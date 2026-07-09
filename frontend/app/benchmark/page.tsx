@@ -25,9 +25,14 @@ export default function BenchmarkPage() {
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold text-zinc-900">Benchmark</h1>
-            <Link href="/" className="text-sm text-blue-600 hover:underline">
-              &larr; Back to chat
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/case-study" className="text-sm text-blue-600 hover:underline">
+                Case study
+              </Link>
+              <Link href="/" className="text-sm text-blue-600 hover:underline">
+                &larr; Back to chat
+              </Link>
+            </div>
           </div>
           <p className="text-sm text-zinc-500 mt-1">
             4-arm ablation on {summary.dataset}, n={summary.n}, seed={summary.seed}, model{" "}

@@ -209,9 +209,8 @@ win.
    AuraDB tier.
 
 8. **Per-task LLM provider chains.** Free cloud LLMs deprecate models without
-   notice, so call sites pick a *task* (`synthesize`) not a provider; the chain
-   tries providers in order and falls back on any error. (Note: `decompose` and
-   `extract` tasks are defined but not yet wired to any call site — see GAPS.)
+   notice, so call sites pick a *task* (currently just `synthesize`) not a
+   provider; the chain tries providers in order and falls back on any error.
 
 9. **`results/summary.json` is the one artifact everything points at.** README,
    RESULTS.md, the Streamlit dashboard, the Next.js benchmark page, and the CI
@@ -280,11 +279,6 @@ numbers could move):**
   Ollama server; the extractor tolerates a truncated chain. Don't remove the cap.
 - **`.env` on disk holds a real Neo4j credential.** It's gitignored (untracked),
   but it's a *live* secret — see GAPS.md before touching or sharing it.
-- **Repo URL is inconsistent.** The git remote is `graphrag-pubmedqa-ablation`;
-  `pyproject.toml` and the frontend link to `Knowledge_Graph_Question_Answering`.
-  Same project, two names. (GAPS.md)
-- **`decompose`/`extract` provider tasks exist but are never called** — only
-  `synthesize` is wired up. Aspirational scaffolding, not live behavior.
 - **`run_benchmark.py`'s Ollama auto-restart uses `pkill`**, which doesn't exist
   on Windows (it degrades to a no-op there). The benchmark is really meant for
   Linux/Colab.
