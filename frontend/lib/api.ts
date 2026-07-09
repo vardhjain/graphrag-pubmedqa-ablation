@@ -12,6 +12,13 @@ const REQUEST_TIMEOUT_MS = 200_000;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// Fire-and-forget /health ping on page load. Render's free tier spins down
+// after ~15 min idle; starting the wake-up as soon as the page renders means
+// the instance is often warm by the time the visitor submits a question.
+export function warmUpBackend(): void {
+  fetch(`${API_URL}/health`).catch(() => {});
+}
+
 export class ApiError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message);
