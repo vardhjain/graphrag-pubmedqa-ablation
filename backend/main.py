@@ -37,14 +37,22 @@ from backend.mcp_server import mcp  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
+# FastMCP's default streamable_http_path is "/mcp", so the returned Starlette
+# app already has a Route("/mcp", ...) -- its routes are merged directly into
+# this app's router (not app.mount("/mcp", ...)) so the final path is exactly
+# "/mcp" with no prefix concatenation. Mounting would make the real path
+# "/mcp/" (mount prefix + the sub-app's own "/"), forcing every bare "/mcp"
+# request through a 307 redirect first; that redirect broke at least one real
+# MCP client's streaming GET (it hung indefinitely rather than following it),
+# even though curl followed it fine -- so avoid the redirect altogether.
 _mcp_app = mcp.streamable_http_app()
 
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    # The mounted MCP sub-app has its own lifespan (starts its session
-    # manager); Starlette does not run a mounted app's lifespan automatically,
-    # so it has to be entered explicitly alongside the parent app's.
+    # The MCP app's own lifespan starts its session manager; merging routes
+    # (rather than app.mount()) means it's no longer run automatically by a
+    # parent Mount either, so it's entered explicitly here.
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(_mcp_app.router.lifespan_context(_mcp_app))
         yield
@@ -56,7 +64,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=_lifespan,
 )
-app.mount("/mcp", _mcp_app)
+app.router.routes.extend(_mcp_app.routes)
 
 # Frontend runs on a different origin (Vercel); allow it in explicitly via env
 # so this isn't wide open by default in production.
