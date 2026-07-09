@@ -189,6 +189,33 @@ export default function CaseStudyPage() {
           </ul>
         </Section>
 
+        <Section title="Using it as an agent">
+          <p>
+            The same <code className="text-xs bg-gray-100 px-1 rounded">answer()</code>{" "}
+            call behind the chat UI and <code className="text-xs bg-gray-100 px-1 rounded">/query</code>{" "}
+            is also exposed as an MCP tool at <code className="text-xs bg-gray-100 px-1 rounded">/mcp</code>{" "}
+            &mdash; any MCP client (Claude Code, Claude Desktop, Cursor) can use this
+            agent by adding one URL, with no cloning and no API key:
+          </p>
+          <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 font-mono text-xs text-zinc-600 overflow-x-auto">
+            claude mcp add --transport http graphrag-pubmedqa
+            https://graphrag-agent-api.onrender.com/mcp
+          </div>
+          <p>
+            Same free-tier cold-start caveat applies as the chat UI: the first call
+            after an idle period can take 60-120s. See{" "}
+            <a
+              href={`${REPO}/blob/main/backend/README.md`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 hover:underline"
+            >
+              backend/README.md
+            </a>{" "}
+            for the Claude Desktop / Cursor config JSON.
+          </p>
+        </Section>
+
         <Section title="Stack">
           <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
             <table className="w-full text-sm">

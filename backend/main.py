@@ -13,6 +13,10 @@ Endpoints:
                             of scope for v1 (see the execution plan's scope
                             warning: ingestion on messy real-world input is
                             where this balloons) and returns 501.
+    /mcp                 -- MCP (Model Context Protocol) endpoint, streamable
+                            HTTP transport. Lets any MCP client (Claude Code,
+                            Claude Desktop, Cursor, ...) use this agent as a
+                            tool by adding this one URL. See mcp_server.py.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from contextlib import AsyncExitStack, asynccontextmanager
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
@@ -28,13 +33,30 @@ from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
+from backend.mcp_server import mcp  # noqa: E402
+
 logger = logging.getLogger(__name__)
+
+_mcp_app = mcp.streamable_http_app()
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # The mounted MCP sub-app has its own lifespan (starts its session
+    # manager); Starlette does not run a mounted app's lifespan automatically,
+    # so it has to be entered explicitly alongside the parent app's.
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(_mcp_app.router.lifespan_context(_mcp_app))
+        yield
+
 
 app = FastAPI(
     title="GraphRAG hosted agent",
     description="GraphRAG vs PlainRAG on PubMedQA -- see /docs and RESULTS.md",
     version="1.0.0",
+    lifespan=_lifespan,
 )
+app.mount("/mcp", _mcp_app)
 
 # Frontend runs on a different origin (Vercel); allow it in explicitly via env
 # so this isn't wide open by default in production.
