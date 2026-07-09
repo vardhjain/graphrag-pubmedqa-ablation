@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { askQuestion, ApiError } from "@/lib/api";
+import { useEffect, useState } from "react";
+import { askQuestion, warmUpBackend, ApiError } from "@/lib/api";
 import type { ChatMessage } from "@/lib/types";
 import ReasoningGraph from "./ReasoningGraph";
 
@@ -11,11 +11,41 @@ const EXAMPLE_QUESTIONS = [
   "Does laparoscopic surgery reduce hospital stay versus open surgery?",
 ];
 
+// Escalating loading copy: a cold free-tier backend can take 1-2 minutes on
+// the first question, and a silent spinner that long reads as "broken".
+function LoadingBubble() {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const message =
+    elapsed < 8
+      ? "Retrieving and reasoning over the graph..."
+      : elapsed < 45
+        ? "Still working -- the free-tier backend is likely waking from a cold start. The first question can take a minute or two; follow-ups take ~15-20s."
+        : "Almost there -- the backend is loading its models and vector cache. This only happens on the first question after an idle period.";
+
+  return (
+    <div className="flex justify-start">
+      <div className="bg-gray-100 rounded-2xl px-4 py-3 text-sm text-gray-500 italic">
+        {message}
+      </div>
+    </div>
+  );
+}
+
 export default function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [openReasoningFor, setOpenReasoningFor] = useState<number | null>(null);
+
+  useEffect(() => {
+    warmUpBackend();
+  }, []);
 
   async function send(question: string) {
     if (!question.trim() || loading) return;
@@ -115,13 +145,7 @@ export default function ChatPanel() {
           </div>
         ))}
 
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl px-4 py-3 text-sm text-gray-500 italic">
-              Retrieving and reasoning over the graph...
-            </div>
-          </div>
-        )}
+        {loading && <LoadingBubble />}
       </div>
 
       <form
