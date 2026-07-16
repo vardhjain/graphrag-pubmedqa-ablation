@@ -24,18 +24,21 @@ services:
       pip install -r backend/requirements.txt &&
       python -c "from sentence_transformers import SentenceTransformer;
       SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    # HF_HUB_OFFLINE=1 is set only here (runtime), not as a service-wide
+    # envVar -- envVars apply to the build step too, and setting it globally
+    # made the buildCommand's own prewarm download fail (offline mode was
+    # already blocking network access before the cache existed to be
+    # offline from -- the first deploy attempt with this file failed for
+    # exactly that reason). Scoping it to startCommand keeps the build step
+    # free to fetch the model while runtime never revalidates that cache
+    # over the network (the slow, rate-limited HEAD-request chain described
+    # above), so a restart loads the encoder from local disk in well under a
+    # second instead of minutes.
+    startCommand: HF_HUB_OFFLINE=1 uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
-      # The model is already cached locally by the buildCommand above; this
-      # stops huggingface_hub from making any network calls to *revalidate*
-      # that cache on every load (the slow, rate-limited HEAD-request chain
-      # described above), so a restart loads the encoder from local disk in
-      # under a second instead of minutes over the network.
-      - key: HF_HUB_OFFLINE
-        value: "1"
       # Render's free plan is 512MB RAM -- loading both the encoder and the
       # cross-encoder reranker (each a full torch model) OOM-killed the
       # instance in practice. Skip the reranker on this tier; retrievers
