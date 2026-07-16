@@ -39,6 +39,21 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      # The build-time prewarm above landed the model in the *default*
+      # HuggingFace cache (~/.cache/huggingface, resolved from $HOME) -- but
+      # Render's build step and the running instance don't share that
+      # directory (confirmed live: the deployed app raised
+      # LocalEntryNotFoundError, unable to find files the build step had
+      # just downloaded seconds earlier). Only the project directory itself
+      # persists from build into runtime (that's why .venv survives).
+      # Pointing HF_HOME at a path inside the project directory -- instead
+      # of relying on the default HOME-based location -- makes the
+      # buildCommand's download and the runtime load agree on where the
+      # cache lives. Verified locally: downloading with this HF_HOME and
+      # then reloading with HF_HUB_OFFLINE=1 from that same path makes zero
+      # network calls and succeeds.
+      - key: HF_HOME
+        value: .render-cache/huggingface
       # Render's free plan is 512MB RAM -- loading both the encoder and the
       # cross-encoder reranker (each a full torch model) OOM-killed the
       # instance in practice. Skip the reranker on this tier; retrievers
