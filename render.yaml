@@ -23,6 +23,18 @@ services:
       # with more memory.
       - key: KGQA_SKIP_RERANKER
         value: "true"
+      # When Neo4j/ArangoDB is unreachable, the service's default behavior is
+      # to degrade to encoding the labeled split locally -- a bounded escape
+      # hatch meant for local dev (see its docstring: "slow -- not for
+      # production"). On this 512MB tier that fallback is slow and
+      # memory-hungry enough to crash the worker instead of degrading
+      # gracefully, and since the crash happens before the encoded store gets
+      # cached, every retry repeats the same doomed multi-minute encode. This
+      # turns that crash-loop into an immediate, clean error, so a graph DB
+      # outage (e.g. the AuraDB free-tier instance auto-pausing/expiring from
+      # inactivity) fails fast instead of taking the whole instance down.
+      - key: KGQA_DISABLE_DATASET_FALLBACK
+        value: "true"
       # Limits BLAS/OMP thread pools so torch/numpy don't each spin up one
       # thread per core, which multiplies memory on shared/limited hosts.
       - key: OMP_NUM_THREADS

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from kgqa.retrieval import ChunkStore, Neo4jGraphRetriever
 from tests.conftest import FakeNeo4jDriver
@@ -109,3 +110,46 @@ def test_get_retriever_builds_when_neo4j_unavailable(monkeypatch, fake_encoder, 
     candidates = retriever._select("aspirin")
     studies = retriever.gather_studies(candidates)  # degrades instead of raising
     assert studies == [(c.paper_key, c.text) for c in candidates]
+
+
+def test_get_store_raises_fast_when_dataset_fallback_disabled(monkeypatch, fake_encoder):
+    """On the hosted tier (KGQA_DISABLE_DATASET_FALLBACK=true, set in
+    render.yaml), a downed graph DB must fail fast instead of falling back to
+    the slow, memory-heavy local dataset encode -- that fallback alone was
+    crashing the Render free-tier worker (512MB) rather than degrading."""
+    import kgqa.service as service
+
+    monkeypatch.setenv("KGQA_DISABLE_DATASET_FALLBACK", "true")
+    monkeypatch.delenv("NEO4J_PASSWORD", raising=False)
+    service._NEO4J_DRIVER_CACHE.clear()
+    service._STORE_CACHE.clear()
+    monkeypatch.setattr(service, "_shared_encoder", lambda: fake_encoder)
+
+    with pytest.raises(RuntimeError, match="Neo4j"):
+        service._get_store("demo")
+
+    assert "demo" not in service._STORE_CACHE
+
+
+def test_get_store_still_falls_back_by_default(monkeypatch, fake_encoder):
+    """Without the flag (local dev's default), the existing degrade-not-raise
+    behavior from test_get_retriever_builds_when_neo4j_unavailable is
+    unchanged."""
+    import kgqa.service as service
+
+    monkeypatch.delenv("KGQA_DISABLE_DATASET_FALLBACK", raising=False)
+    monkeypatch.delenv("NEO4J_PASSWORD", raising=False)
+    service._NEO4J_DRIVER_CACHE.clear()
+    service._STORE_CACHE.clear()
+    monkeypatch.setattr(service, "_shared_encoder", lambda: fake_encoder)
+    monkeypatch.setattr(
+        service.ChunkStore, "from_dataset",
+        classmethod(lambda cls, encoder, include_unlabeled=True: ChunkStore(
+            ["Chunks/1_0"], ["1"], ["aspirin study"],
+            np.asarray(encoder.encode(["aspirin study"], normalize_embeddings=True)))),
+    )
+
+    store = service._get_store("demo")
+
+    assert store is not None
+    assert service._STORE_CACHE["demo"] is store

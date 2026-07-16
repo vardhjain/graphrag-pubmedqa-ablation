@@ -151,6 +151,29 @@ class AnswerResult:
     sources: list[str] = field(default_factory=list)
 
 
+def _dataset_fallback_or_raise(graph_id: str, backend_name: str, encoder) -> ChunkStore:
+    """``ChunkStore.from_dataset`` is a bounded, CPU-heavy local-encode escape
+    hatch for local dev without a graph DB configured (its own docstring calls
+    it "slow -- not for production"). On a memory-constrained hosted tier
+    (Render free, 512MB) it's slow and memory-hungry enough to crash the
+    worker outright before it can even finish and cache a result -- so every
+    retry repeats the same doomed work rather than degrading gracefully.
+    ``KGQA_DISABLE_DATASET_FALLBACK=true`` (set in render.yaml) turns that
+    crash-after-~150s into an immediate, clean error instead. Read from the
+    environment here (not as a module-level constant) so it can't go stale if
+    set after import, same footgun as ``providers.py``'s GAPS entry.
+    """
+    if os.environ.get("KGQA_DISABLE_DATASET_FALLBACK", "").lower() == "true":
+        raise RuntimeError(
+            f"{backend_name} is unavailable for graph_id={graph_id!r} and the local "
+            "dataset-encode fallback is disabled (KGQA_DISABLE_DATASET_FALLBACK=true) "
+            "on this tier."
+        )
+    print(f"[GraphRAG] No {backend_name} for graph_id={graph_id!r}; encoding the labeled "
+          "split locally as a bounded fallback (this is slow -- not for production).")
+    return ChunkStore.from_dataset(encoder, include_unlabeled=False)
+
+
 def _get_store(graph_id: str) -> ChunkStore:
     """Resolve a ``graph_id`` to its chunk store, building/caching on first use.
 
@@ -178,18 +201,14 @@ def _get_store(graph_id: str) -> ChunkStore:
                 cache_file = os.path.join(_CACHE_DIR, "demo_neo4j_vectors.pkl")
                 store = ChunkStore.from_neo4j(driver, cache_file=cache_file)
             else:
-                print("[GraphRAG] No Neo4j for the demo graph; encoding the labeled "
-                      "split locally as a bounded fallback (this is slow -- not for production).")
-                store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
+                store = _dataset_fallback_or_raise(graph_id, "Neo4j", encoder)
         else:
             db = _shared_db(graph_id)
             if db is not None:
                 cache_file = os.path.join(_CACHE_DIR, f"{graph_id}_vectors.pkl")
                 store = ChunkStore.from_arango(db, cache_file=cache_file)
             else:
-                print(f"[GraphRAG] No ArangoDB for graph_id={graph_id!r}; encoding the labeled "
-                      "split locally as a bounded fallback (this is slow -- not for production).")
-                store = ChunkStore.from_dataset(encoder, include_unlabeled=False)
+                store = _dataset_fallback_or_raise(graph_id, "ArangoDB", encoder)
         _STORE_CACHE[graph_id] = store
         return store
 
