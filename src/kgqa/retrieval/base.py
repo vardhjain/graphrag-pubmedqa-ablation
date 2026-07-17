@@ -303,6 +303,12 @@ class GraphExpansionMixin:
                     if key not in seed_keys and abstract:
                         studies.append((key, abstract))
         except Exception as exc:  # graph unreachable -> degrade to raw chunks
+            # Counted (GAPS #10), not just print()ed: on the benchmark path a
+            # mass-degrade would quietly turn a graph arm into plain-arm
+            # numbers while the run still "succeeds" -- a print() is easy to
+            # miss in a 200-question log. scripts/run_benchmark.py reads this
+            # counter's delta per question and reports the total at the end.
+            self._degraded_count = getattr(self, "_degraded_count", 0) + 1
             print(f"[GraphRAG] {type(self).__name__} expansion failed ({exc}). "
                   "Using raw chunks.")
             studies = [(c.paper_key, c.text) for c in candidates]

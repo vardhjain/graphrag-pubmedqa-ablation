@@ -145,11 +145,21 @@ def main():
 
     fuzzy = FuzzyEvaluator()
     evaluator = Evaluator(args.arm)
+    n_degraded = 0
     print(f"\n=== Benchmark: {args.arm}  (n={len(samples)}, seed={seed}) ===")
     for i, s in enumerate(samples):
         t0 = time.time()
         raw = None
         retrieved_papers: list[str] = []
+        # GAPS #10: gather_studies() (graph arms only) silently degrades to
+        # raw chunks on any graph-expansion failure -- a mass-degrade would
+        # quietly turn a graph arm into plain-arm numbers while the run
+        # still "succeeds," and a print() alone is easy to miss in a
+        # 200-question log. Delta the retriever's own counter across this
+        # question's attempt(s) rather than narrowing the catch itself,
+        # which risks missing a legitimate transient error the fallback is
+        # meant to protect against.
+        degraded_before = getattr(retriever, "_degraded_count", 0)
         for attempt in range(1, MAX_TRIES + 1):
             try:
                 raw, retrieved_papers = retriever.answer_benchmark(s.question)
@@ -160,6 +170,8 @@ def main():
                 if attempt < MAX_TRIES and not args.no_ollama_start:
                     ensure_ollama(OLLAMA_API, LLM_MODEL, restart=True)
         latency = time.time() - t0
+        if getattr(retriever, "_degraded_count", 0) > degraded_before:
+            n_degraded += 1
 
         if raw is None:
             pred = "maybe"  # last resort so one bad call doesn't abort the arm
@@ -174,6 +186,12 @@ def main():
                         failed=(raw is None), retrieved_papers=retrieved_papers)
         if (i + 1) % CHECKPOINT_EVERY == 0:
             evaluator.save(out_path)  # checkpoint partial progress
+
+    if n_degraded:
+        print(f"\n[GraphRAG] {n_degraded}/{len(samples)} question(s) had graph expansion "
+              "fail and fell back to raw chunks -- see the [GraphRAG] ... expansion failed "
+              "warnings above for why. A large count here means this arm's numbers may be "
+              "closer to a plain arm's than they appear.")
 
     evaluator.report()
     evaluator.save(out_path)
