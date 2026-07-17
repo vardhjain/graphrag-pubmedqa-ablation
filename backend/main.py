@@ -24,6 +24,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import threading
 from contextlib import AsyncExitStack, asynccontextmanager
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +49,37 @@ logger = logging.getLogger(__name__)
 _mcp_app = mcp.streamable_http_app()
 
 
+def _warm_up_demo_graph() -> None:
+    """Load the encoder + demo graph's store/retriever once, proactively.
+
+    /health returns a static dict and touches nothing on the answer path, so
+    the keep-warm cron's periodic pings (.github/workflows/keep-warm.yml)
+    only ever kept the *process* alive -- after any restart (a new deploy,
+    or the free tier spinning down and back up), the first real /query still
+    paid the full cold-model-load cost inline. This runs that load eagerly
+    at startup instead, in parallel with whatever request/routing latency
+    gets a user to their first real question. Never lets a failure here take
+    the app down: the same work just happens lazily on first /query instead,
+    exactly as it did before this existed.
+    """
+    from kgqa.service import _get_retriever
+
+    try:
+        _get_retriever("demo")
+        logger.info("Startup warm-up: demo graph loaded.")
+    except Exception:
+        logger.exception("Startup warm-up failed; will load lazily on first /query instead.")
+
+
+def _maybe_warm_up_in_background() -> None:
+    """KGQA_WARM_ON_STARTUP=true (set in render.yaml) opts into this --
+    default off so importing this module never triggers a real model/DB load
+    in local dev, tests, or CI."""
+    if os.environ.get("KGQA_WARM_ON_STARTUP", "").lower() != "true":
+        return
+    threading.Thread(target=_warm_up_demo_graph, daemon=True).start()
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     # The MCP app's own lifespan starts its session manager; merging routes
@@ -55,6 +87,7 @@ async def _lifespan(_app: FastAPI):
     # parent Mount either, so it's entered explicitly here.
     async with AsyncExitStack() as stack:
         await stack.enter_async_context(_mcp_app.router.lifespan_context(_mcp_app))
+        _maybe_warm_up_in_background()
         yield
 
 
@@ -110,7 +143,13 @@ class IngestResponse(BaseModel):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    # A cheap readiness signal alongside liveness: reads the already-built
+    # cache, never triggers a load. The first real observability into
+    # whether the demo graph is actually warm, not just whether the process
+    # is up.
+    from kgqa import service
+
+    return {"status": "ok", "demo_graph_loaded": "demo" in service._STORE_CACHE}
 
 
 @app.post("/query", response_model=QueryResponse)
