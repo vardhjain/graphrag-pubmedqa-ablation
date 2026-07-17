@@ -43,6 +43,7 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [openReasoningFor, setOpenReasoningFor] = useState<number | null>(null);
+  const [useConcepts, setUseConcepts] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export default function ChatPanel() {
     const start = performance.now();
 
     try {
-      const result = await askQuestion({ question });
+      const result = await askQuestion({ question, use_concepts: useConcepts });
       setMessages((prev) => [
         ...prev,
         {
@@ -176,12 +177,33 @@ export default function ChatPanel() {
         <div ref={bottomRef} />
       </div>
 
+      <div className="px-4 pt-3 border-t border-gray-200">
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          <input
+            type="checkbox"
+            checked={useConcepts}
+            onChange={(e) => setUseConcepts(e.target.checked)}
+            className="rounded"
+          />
+          Explore MeSH concept hops (slower;{" "}
+          <a
+            href="https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-blue-600"
+          >
+            not shown to improve accuracy
+          </a>
+          )
+        </label>
+      </div>
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
           send(input);
         }}
-        className="flex gap-2 p-4 border-t border-gray-200"
+        className="flex gap-2 p-4 pt-2"
       >
         <input
           value={input}
