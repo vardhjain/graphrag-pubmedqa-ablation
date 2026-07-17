@@ -19,7 +19,7 @@ on every AuraDB tier.
 from __future__ import annotations
 
 from ..config import CONCEPT_HOP_PAPERS
-from .base import BaseRetriever, Candidate
+from .base import BaseRetriever, Candidate, GraphExpansionMixin
 
 _PARENT_CYPHER = """
 UNWIND $keys AS ckey
@@ -31,6 +31,13 @@ WITH paper, collect(c.text) AS texts
 RETURN DISTINCT paper.key AS paper, texts
 """
 
+# NOTE -- known semantic divergence from graph.py's _CONCEPT_AQL (GAPS #9):
+# this correctly counts DISTINCT concepts shared with each neighbour
+# (count(DISTINCT concept)). _CONCEPT_AQL's COLLECT ... WITH COUNT instead
+# counts every (seed, concept) -> neighbour edge, which overcounts when
+# multiple seeds share one concept with the same neighbour. This file's
+# semantics are the intended ones; graph.py's comment has the fix noted for
+# whenever it can be verified against a live ArangoDB instance.
 _CONCEPT_CYPHER = """
 MATCH (seed:Paper) WHERE seed.key IN $paper_keys
 MATCH (seed)-[:MENTIONS]->(concept:Concept)<-[:MENTIONS]-(neighbour:Paper)
@@ -53,7 +60,7 @@ def _local_key(chunk_id: str) -> str:
     return chunk_id.split("/", 1)[-1] if "/" in chunk_id else chunk_id
 
 
-class Neo4jGraphRetriever(BaseRetriever):
+class Neo4jGraphRetriever(GraphExpansionMixin, BaseRetriever):
     name = "graph"
 
     def __init__(self, store, encoder, driver, reranker=None,
@@ -79,24 +86,9 @@ class Neo4jGraphRetriever(BaseRetriever):
             ))
         return [(row["paper"], " ".join(row["texts"])) for row in rows]
 
-    def gather_studies(self, candidates: list[Candidate]) -> list[tuple[str, str]]:
-        """Expand ``candidates`` to (paper_key, full_abstract) pairs via Neo4j.
-
-        Degrades to the raw retrieved chunks if the graph is unreachable --
-        same fallback contract as ``GraphRetriever.gather_studies``.
-        """
-        chunk_ids = [c.chunk_id for c in candidates]
-        try:
-            studies = self._parent_abstracts(chunk_ids)
-            seed_keys = [k for k, _ in studies]
-            if self.use_concepts and seed_keys:
-                for key, abstract in self._concept_neighbours(seed_keys):
-                    if key not in seed_keys and abstract:
-                        studies.append((key, abstract))
-        except Exception as exc:  # graph unreachable -> degrade to raw chunks
-            print(f"[GraphRAG] Neo4j graph expansion failed ({exc}). Using raw chunks.")
-            studies = [(c.paper_key, c.text) for c in candidates]
-        return studies
+    # gather_studies() is inherited from GraphExpansionMixin -- same fallback
+    # contract as GraphRetriever's (GAPS #9: these used to be two independent
+    # copies of this exact control flow).
 
     def _build_context(self, query: str, candidates: list[Candidate]) -> str:
         from .graph import format_studies

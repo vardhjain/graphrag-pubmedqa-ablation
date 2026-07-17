@@ -288,7 +288,7 @@ def answer(question: str, graph_id: str = "demo", use_concepts: bool = False) ->
     without a cloud API key configured.
     """
     retriever = _get_retriever(graph_id, use_concepts=use_concepts)
-    candidates = retriever._select(question)
+    candidates = retriever.select(question)
     studies = retriever.gather_studies(candidates)
     context = format_studies(studies)
 

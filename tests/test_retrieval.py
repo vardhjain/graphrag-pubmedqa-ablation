@@ -1,6 +1,7 @@
 import numpy as np
 
-from kgqa.retrieval import ChunkStore, GraphRetriever, PlainRetriever
+from kgqa.retrieval import ChunkStore, GraphExpansionMixin, GraphRetriever, PlainRetriever
+from kgqa.retrieval.neo4j_graph import Neo4jGraphRetriever
 from tests.conftest import FakeDB
 
 
@@ -34,6 +35,32 @@ def test_plain_context_is_raw_chunks(fake_encoder):
     ctx = r.retrieve("aspirin heart attack")
     assert ctx.startswith("Abstract 1:")
     assert "aspirin" in ctx
+
+
+def test_both_graph_backends_share_the_expansion_mixin():
+    """GAPS #9 regression guard: GraphRetriever (ArangoDB) and
+    Neo4jGraphRetriever used to each carry their own byte-identical
+    gather_studies -- pin that both now get it from the single shared
+    mixin, not a per-class copy."""
+    assert issubclass(GraphRetriever, GraphExpansionMixin)
+    assert issubclass(Neo4jGraphRetriever, GraphExpansionMixin)
+    assert GraphRetriever.gather_studies is GraphExpansionMixin.gather_studies
+    assert Neo4jGraphRetriever.gather_studies is GraphExpansionMixin.gather_studies
+
+
+def test_public_select_matches_private_select(fake_encoder, fake_reranker):
+    """select() (GAPS #12) is a thin public wrapper so callers like
+    kgqa.service.answer don't have to reach past the leading underscore
+    into _select -- must return the identical result."""
+    store = make_store(fake_encoder)
+    r = PlainRetriever(store, fake_encoder, reranker=fake_reranker, top_k_final=2)
+    query = "aspirin heart attack"
+
+    public = r.select(query)
+    private = r._select(query)
+
+    assert [c.chunk_id for c in public] == [c.chunk_id for c in private]
+    assert len(public) == 2
 
 
 def test_graph_parent_expansion_uses_full_abstract(fake_encoder, fake_reranker):

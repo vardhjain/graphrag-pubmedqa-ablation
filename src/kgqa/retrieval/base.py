@@ -215,6 +215,15 @@ class BaseRetriever(ABC):
             ]
         return candidates[:self.top_k_final]
 
+    def select(self, query: str) -> list[Candidate]:
+        """Public entry point for callers that need the selected candidates
+        directly (e.g. kgqa.service.answer, which also needs them to build a
+        reasoning-path trace) rather than going through retrieve()'s
+        select-then-format pipeline. Keeps _select as the actual
+        implementation so callers aren't reaching past the leading
+        underscore into what's meant to be an internal method."""
+        return self._select(query)
+
     @abstractmethod
     def _build_context(self, query: str, candidates: list[Candidate]) -> str:
         """Turn selected chunks into the LLM context string."""
@@ -242,6 +251,49 @@ class BaseRetriever(ABC):
                              system=BENCHMARK_SYSTEM_PROMPT)
         retrieved_papers = list(dict.fromkeys(c.paper_key for c in candidates))
         return answer, retrieved_papers
+
+
+class GraphExpansionMixin:
+    """Shared ``gather_studies`` orchestration for graph-backed retrievers.
+
+    ``GraphRetriever`` (ArangoDB) and ``Neo4jGraphRetriever`` (Neo4j) used to
+    each carry their own byte-identical copy of this control flow -- parent-
+    paper expansion, optional MeSH concept hop, degrade-to-raw-chunks on any
+    failure -- differing only in which backend-specific query ran underneath.
+    Two copies drift; this is the single-sourced version. Requires the
+    including class to provide ``self.use_concepts`` and two backend-specific
+    methods, each returning ``list[(paper_key, abstract)]``:
+
+    - ``_parent_abstracts(chunk_ids: list[str])``
+    - ``_concept_neighbours(paper_keys: list[str])``
+
+    Deliberately does *not* touch either backend's actual AQL/Cypher query --
+    only the Python orchestration around them, which is what was actually
+    duplicated. See ``graph.py``'s ``_CONCEPT_AQL`` and ``neo4j_graph.py``'s
+    ``_CONCEPT_CYPHER`` for a documented semantic divergence between the two
+    that this refactor does not paper over.
+    """
+
+    def gather_studies(self, candidates: list[Candidate]) -> list[tuple[str, str]]:
+        """Expand ``candidates`` to (paper_key, full_abstract) pairs via the
+        graph. Degrades to the raw retrieved chunks if the graph is
+        unreachable. Exposed (not just used internally) so callers that also
+        need the expansion result -- e.g. to build a reasoning-path
+        visualization -- don't have to re-run the traversal themselves.
+        """
+        chunk_ids = [c.chunk_id for c in candidates]
+        try:
+            studies = self._parent_abstracts(chunk_ids)
+            seed_keys = [k for k, _ in studies]
+            if self.use_concepts and seed_keys:
+                for key, abstract in self._concept_neighbours(seed_keys):
+                    if key not in seed_keys and abstract:
+                        studies.append((key, abstract))
+        except Exception as exc:  # graph unreachable -> degrade to raw chunks
+            print(f"[GraphRAG] {type(self).__name__} expansion failed ({exc}). "
+                  "Using raw chunks.")
+            studies = [(c.paper_key, c.text) for c in candidates]
+        return studies
 
     def chat(self, question: str, temperature: float = 0.3) -> dict:
         """Conversational answer plus the source paper pubids it retrieved.

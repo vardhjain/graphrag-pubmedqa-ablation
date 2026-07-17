@@ -15,7 +15,7 @@ no question-derived title or ``final_decision`` ever reaches the prompt.
 from __future__ import annotations
 
 from ..config import CONCEPT_HOP_PAPERS, HAS_CONTEXT, MENTIONS
-from .base import BaseRetriever, Candidate
+from .base import BaseRetriever, Candidate, GraphExpansionMixin
 
 # Reconstruct the full abstract of each selected chunk's parent paper.
 _PARENT_AQL = """
@@ -38,6 +38,21 @@ _PARENT_AQL = """
 # Two-stage: rank neighbours by how many concepts they share with the seeds
 # (cheap), then reconstruct abstracts only for the top-N (avoids building an
 # abstract for every candidate on every query).
+#
+# NOTE -- known semantic divergence from neo4j_graph.py's _CONCEPT_CYPHER
+# (GAPS #9): the COLLECT below counts every (seed, concept) -> neighbour
+# edge reaching a neighbour, not the number of *distinct* concepts shared
+# with it -- two different seed papers sharing one concept with the same
+# neighbour count as 2, not 1. _CONCEPT_CYPHER's `count(DISTINCT concept)`
+# is the intended semantics ("how many concepts they share with the seeds",
+# per the comment above). Left undisturbed rather than fixed blind: AQL
+# can't be exercised in this dev environment (tests fake db.aql.execute
+# entirely, see tests/conftest.py's FakeAQL), and CLAUDE.md's own rule is
+# that retrieval/graph.py's queries must stay behavior-compatible without a
+# fresh benchmark run to re-validate against. Fix this AQL to explicitly
+# count unique concept keys per neighbour (e.g. COLLECT ... INTO groups,
+# then COUNT(UNIQUE(...))) the next time this file is touched with a live
+# ArangoDB instance to verify against.
 _CONCEPT_AQL = """
     WITH Papers, Chunks, Concepts
     LET seeds = @paper_keys
@@ -63,7 +78,7 @@ _CONCEPT_AQL = """
 """
 
 
-class GraphRetriever(BaseRetriever):
+class GraphRetriever(GraphExpansionMixin, BaseRetriever):
     name = "graph"
 
     def __init__(self, store, encoder, db, reranker=None,
@@ -102,26 +117,10 @@ class GraphRetriever(BaseRetriever):
         )
         return [(row["paper"], row.get("abstract", "")) for row in rows]
 
-    def gather_studies(self, candidates: list[Candidate]) -> list[tuple[str, str]]:
-        """Expand ``candidates`` to (paper_key, full_abstract) pairs via the graph.
-
-        Degrades to the raw retrieved chunks if the graph is unreachable.
-        Exposed (not just used internally) so callers that also need the
-        expansion result -- e.g. to build a reasoning-path visualization --
-        don't have to re-run the AQL traversal themselves.
-        """
-        chunk_ids = [c.chunk_id for c in candidates]
-        try:
-            studies = self._parent_abstracts(chunk_ids)
-            seed_keys = [k for k, _ in studies]
-            if self.use_concepts and seed_keys:
-                for key, abstract in self._concept_neighbours(seed_keys):
-                    if key not in seed_keys and abstract:
-                        studies.append((key, abstract))
-        except Exception as exc:  # graph unreachable -> degrade to raw chunks
-            print(f"[GraphRAG] Graph expansion failed ({exc}). Using raw chunks.")
-            studies = [(c.paper_key, c.text) for c in candidates]
-        return studies
+    # gather_studies() is inherited from GraphExpansionMixin (GAPS #9 --
+    # this class used to carry its own byte-identical copy of that
+    # orchestration; only _parent_abstracts/_concept_neighbours differ
+    # per backend now).
 
     def _build_context(self, query: str, candidates: list[Candidate]) -> str:
         return format_studies(self.gather_studies(candidates))

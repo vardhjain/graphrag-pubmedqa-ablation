@@ -153,28 +153,34 @@ confirm the dashboard's Environment tab matches after any future change here.
 
 ---
 
-## 9. Duplicated graph-retrieval logic across two backends — TECH DEBT (LOW-MEDIUM)
+## 9. ~~Duplicated graph-retrieval logic across two backends~~ — PARTIALLY FIXED
 
-**What:** `GraphRetriever` (ArangoDB, `graph.py`) and `Neo4jGraphRetriever`
-(`neo4j_graph.py`) have near-identical `gather_studies` bodies (parent expansion +
+**What it was:** `GraphRetriever` (ArangoDB, `graph.py`) and `Neo4jGraphRetriever`
+(`neo4j_graph.py`) had near-identical `gather_studies` bodies (parent expansion +
 optional concept hop + same degrade-to-raw-chunks fallback). The two also compute
 "shared concept count" with subtly different semantics — AQL `COLLECT … WITH COUNT`
 vs Cypher `count(DISTINCT concept)`.
 
-**Where:** `src/kgqa/retrieval/graph.py:105-124` vs
-`src/kgqa/retrieval/neo4j_graph.py:82-99`; concept queries at `graph.py:41-63`
-(`_CONCEPT_AQL`) vs `neo4j_graph.py:34-46` (`_CONCEPT_CYPHER`).
+**Fixed (2026-07-17):** the shared `gather_studies` orchestration is lifted into
+`GraphExpansionMixin` (`src/kgqa/retrieval/base.py`); both retrievers now inherit
+the identical control flow instead of carrying their own copy —
+`tests/test_retrieval.py`'s `test_both_graph_backends_share_the_expansion_mixin`
+pins this directly (`GraphRetriever.gather_studies is
+GraphExpansionMixin.gather_studies`, same for Neo4j).
 
-**Why it matters:** Two copies drift. The concept-count divergence means the two
-backends can rank concept-neighbours differently — and since the Neo4j demo's
-concept-hop path is **never benchmarked**, a divergence would go unnoticed. Any
-future fix to expansion logic must be applied twice, correctly.
-
-**Fix:** Lift the shared `gather_studies` control flow (parent → seed keys →
-optional concept hop → fallback) into `BaseRetriever` or a small mixin, leaving
-each subclass to implement only `_parent_abstracts` / `_concept_neighbours`. Keep
-the two DB queries but make the orchestration single-sourced. Add a comment
-documenting the intended concept-count semantics so both queries match.
+**Still open — the concept-count semantic divergence itself:** deliberately
+*not* fixed here. `_CONCEPT_AQL` (`graph.py`) counts every `(seed, concept) ->
+neighbour` edge; `_CONCEPT_CYPHER` (`neo4j_graph.py`)'s `count(DISTINCT concept)`
+is the correct, intended semantics. Fixing the AQL side means rewriting a live
+query with no way to execute or verify it in this dev environment (the test
+suite fakes `db.aql.execute` entirely — see `tests/conftest.py`'s `FakeAQL`,
+which pattern-matches query text rather than running it), and CLAUDE.md's own
+rule is that these queries stay behavior-compatible without a fresh benchmark
+run to re-validate against. Both files now carry an explicit comment
+cross-referencing the other and stating which fix is needed
+(`graph.py`'s `_CONCEPT_AQL`, `neo4j_graph.py`'s `_CONCEPT_CYPHER`) — fix the
+AQL to count unique concept keys per neighbour the next time this file is
+touched with a live ArangoDB instance available.
 
 ---
 
@@ -228,23 +234,19 @@ apparently never was.
 
 ---
 
-## 12. `service.answer` reaches into retriever private methods — COUPLING (LOW)
+## 12. ~~`service.answer` reaches into retriever private methods~~ — FIXED
 
-**What:** `service.answer` calls `retriever._select(question)` and
-`retriever.gather_studies(...)` directly (the leading underscore marks `_select`
-as private). It re-implements the retrieve→answer flow instead of using the
-public `retrieve()` / `answer_benchmark()` / `chat()` surface, because it needs
-the intermediate `candidates` and `studies` to build `reasoning_path`.
+**What it was:** `service.answer` called `retriever._select(question)` directly
+(the leading underscore marks `_select` as private) because it needs the
+intermediate `candidates` to build `reasoning_path`, and the public surface
+(`retrieve()` / `answer_benchmark()` / `chat()`) didn't expose them.
 
-**Where:** `src/kgqa/service.py:222-224`.
-
-**Why it matters:** Refactoring `BaseRetriever._select`'s signature silently
-breaks the service with no type error. The private-method reach is a smell that
-the public interface is missing a "retrieve and return the intermediates" method.
-
-**Fix:** Add a public `BaseRetriever.select(query) -> list[Candidate]` (or a
-`retrieve_with_trace()` returning candidates + context) and have `service.answer`
-use it. Keep `_select` as the internal implementation.
+**Fixed (2026-07-17):** added a public `BaseRetriever.select(query) ->
+list[Candidate]` (`src/kgqa/retrieval/base.py`) that's a thin wrapper over
+`_select` — kept as the internal implementation, per this entry's own
+suggested fix. `service.answer` now calls `retriever.select(question)`.
+`tests/test_retrieval.py`'s `test_public_select_matches_private_select`
+pins that the two return identical results.
 
 ---
 
