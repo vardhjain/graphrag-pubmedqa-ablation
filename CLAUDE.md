@@ -37,7 +37,7 @@ pip install -r requirements-app.txt      # + gradio, streamlit (UIs)
 cp .env.example .env                      # then set ARANGO_PASS / NEO4J_PASSWORD etc.
 
 # Quality (what CI runs — CPU only, no DB/LLM/GPU needed)
-make test        # pytest  (50 tests; testpaths = tests/ + backend/)
+make test        # pytest  (79+ tests; testpaths = tests/ + backend/)
 make lint        # ruff check src scripts tests app
 make format      # ruff check --fix ...
 pytest tests/test_results_regression.py -v   # the eval regression gate specifically
