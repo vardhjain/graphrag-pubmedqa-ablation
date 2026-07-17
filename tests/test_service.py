@@ -112,6 +112,35 @@ def test_get_retriever_builds_when_neo4j_unavailable(monkeypatch, fake_encoder, 
     assert studies == [(c.paper_key, c.text) for c in candidates]
 
 
+def test_shared_encoder_uses_onnx_loader_when_env_gated(monkeypatch):
+    """KGQA_ENCODER=onnx (the hosted tier's setting, see render.yaml) must
+    route through models.load_onnx_encoder -- the torch-free path that fits
+    a 512MB host."""
+    import kgqa.models as models
+    import kgqa.service as service
+
+    sentinel = object()
+    monkeypatch.setenv("KGQA_ENCODER", "onnx")
+    monkeypatch.setattr(service, "_ENCODER", None)  # reset + auto-restore the singleton
+    monkeypatch.setattr(models, "load_onnx_encoder", lambda: sentinel)
+
+    assert service._shared_encoder() is sentinel
+
+
+def test_shared_encoder_defaults_to_torch_loader(monkeypatch):
+    """Without the env gate, the original sentence-transformers path is
+    selected unchanged -- the rollback story and the local-dev default."""
+    import kgqa.models as models
+    import kgqa.service as service
+
+    sentinel = object()
+    monkeypatch.delenv("KGQA_ENCODER", raising=False)
+    monkeypatch.setattr(service, "_ENCODER", None)
+    monkeypatch.setattr(models, "load_encoder", lambda: sentinel)
+
+    assert service._shared_encoder() is sentinel
+
+
 def test_get_store_raises_fast_when_dataset_fallback_disabled(monkeypatch, fake_encoder):
     """On the hosted tier (KGQA_DISABLE_DATASET_FALLBACK=true, set in
     render.yaml), a downed graph DB must fail fast instead of falling back to

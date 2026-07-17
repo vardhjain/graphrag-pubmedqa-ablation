@@ -10,3 +10,8 @@ ruff>=0.4.0
 fastapi>=0.110
 httpx
 mcp>=1.9
+
+# Lets tests/test_onnx_encoder.py exercise the real OnnxEncoder locally.
+# Deliberately NOT in CI's install list -- that test importorskips, and the
+# encoder-selection tests in tests/test_service.py monkeypatch the loader.
+onnxruntime>=1.17,<2

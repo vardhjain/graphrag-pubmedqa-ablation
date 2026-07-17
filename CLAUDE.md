@@ -120,6 +120,13 @@ blueprint), frontend → Vercel, dashboard → Streamlit Community Cloud. See
   `synthesize` is wired. Don't assume a decomposition pipeline exists (GAPS #4).
 - **`run_benchmark.py`'s Ollama auto-restart uses `pkill`** — a no-op on Windows.
   Benchmark is effectively Linux/Colab-only.
+- **The hosted tier and the benchmark use different encoder *runtimes*, same
+  weights.** Render sets `KGQA_ENCODER=onnx` so `service._shared_encoder()`
+  loads `models.OnnxEncoder` (onnxruntime, no torch — the torch stack alone
+  OOMs 512MB); the benchmark calls `models.load_encoder` (sentence-transformers)
+  directly and never reads that gate. Same `all-MiniLM-L6-v2` weights and 384-dim
+  space either way, so vectors stay interchangeable — `scripts/verify_onnx_parity.py`
+  is the gate that proves it. Don't "unify" these either.
 - **Repo slug is inconsistent** (`graphrag-pubmedqa-ablation` vs
   `Knowledge_Graph_Question_Answering`) — see GAPS #6 before adding new links.
 - **`frontend/.env.local` currently points at `:8123`** (wrong); backend is

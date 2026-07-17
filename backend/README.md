@@ -91,3 +91,29 @@ Free tier sleeps after ~15 min idle (30-50s cold start on the next request).
 `/health` every 10 minutes during daytime hours to keep it warm without
 burning the whole free-hours budget. Set the `BACKEND_URL` repo secret to the
 deployed Render URL once it exists.
+
+### Fitting in 512MB: `KGQA_ENCODER=onnx`
+
+The free tier's 512MB is not enough for the torch + sentence-transformers
+stack, which OOM-killed the instance mid-`/query`. Measured locally, loading
+the encoder plus the demo store costs **~700MB on the torch path vs ~290MB on
+the ONNX one** -- torch was never going to fit in 512MB.
+`KGQA_ENCODER=onnx` (set in `render.yaml`) swaps in
+[`OnnxEncoder`](../src/kgqa/models.py) instead: the *same* model weights via
+that repo's official ONNX export, run on `onnxruntime` with no torch import,
+in the same 384-dim vector space -- so the chunk embeddings already in Neo4j
+work untouched, no re-ingestion. `KGQA_SKIP_RERANKER=true` (also memory) and
+`KGQA_DISABLE_DATASET_FALLBACK=true` (fail fast instead of crash-looping when
+the graph DB is down) are set for the same tier.
+
+To roll back, unset `KGQA_ENCODER` -- the torch path is unchanged, and
+`render.yaml`'s build step still prewarms its model files for exactly that
+reason. [`scripts/verify_onnx_parity.py`](../scripts/verify_onnx_parity.py)
+is the pre-deploy gate: it asserts both encoders agree (cosine > 0.999) and
+retrieve the same top-3 chunks in the same order. Run it before changing
+anything about the encoder.
+
+Render does **not** auto-sync `render.yaml`'s build command or plain `value:`
+env vars onto an existing service -- mirror those into the dashboard by hand,
+and use "Clear build cache & deploy" when the build command changes what it
+downloads.
