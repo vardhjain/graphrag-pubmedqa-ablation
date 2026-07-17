@@ -43,6 +43,16 @@ expansion over a reranked RAG baseline, McNemar p<0.0001" — not "GraphRAG gets
 65% accuracy" and not "graph retrieval is 2x faster" (it is ~14% *slower*,
 7.5s vs 6.6s, and that's an honest, disclosed tradeoff for the accuracy gain).
 
+**A methodology note on unparseable output:** `FuzzyEvaluator` (`src/kgqa/
+evaluation.py`) defaults any answer it can't extract a yes/no/maybe from to
+`"maybe"` — a deliberate, documented choice (one label has to absorb "the
+model didn't answer clearly"), but it's not a neutral one: it biases those
+errors toward the rare `maybe` class rather than splitting them across all
+three, and can flatter or penalize an arm depending on how often *that arm
+specifically* produces unparseable output. Worth knowing when comparing arms
+with meaningfully different failure/degradation rates (see the per-arm
+`n_failed` count `scripts/compare.py` now reports).
+
 ## Caveat: the hosted demo runs an unbenchmarked configuration
 
 The numbers above come from the untouched ArangoDB benchmark pipeline. The
