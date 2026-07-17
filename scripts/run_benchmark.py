@@ -163,7 +163,7 @@ def main():
             icon = "v" if pred == s.final_decision.lower().strip() else "x"
             print(f"[{i + 1:3d}]  GT={s.final_decision:<5}  Pred={pred:<5}  {icon}  ({latency:.1f}s)")
 
-        evaluator.record(s.final_decision, pred, latency, sample_id=s.pubid)
+        evaluator.record(s.final_decision, pred, latency, sample_id=s.pubid, failed=(raw is None))
         if (i + 1) % CHECKPOINT_EVERY == 0:
             evaluator.save(out_path)  # checkpoint partial progress
 

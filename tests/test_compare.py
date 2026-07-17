@@ -53,6 +53,42 @@ def test_aligned_falls_back_to_positional_ids_when_missing():
     assert pb == ["no", "no"]
 
 
+def test_aligned_excludes_ids_where_either_arm_failed():
+    """A sample where the LLM call exhausted retries records a placeholder
+    'maybe', not a genuine judgment -- pairing it into McNemar would
+    attribute an infra timeout to the retrieval strategy being compared."""
+    a = {
+        "ids": [1, 2, 3],
+        "y_true": ["yes", "no", "maybe"],
+        "y_pred": ["yes", "no", "maybe"],
+        "failed": [False, True, False],  # id=2 failed in arm A
+    }
+    b = {
+        "ids": [1, 2, 3],
+        "y_true": ["yes", "no", "maybe"],
+        "y_pred": ["yes", "yes", "no"],
+        "failed": [False, False, True],  # id=3 failed in arm B
+    }
+
+    gt, pa, pb = aligned(a, b)
+
+    assert gt == ["yes"]  # only id=1 survives -- 2 and 3 each failed in one arm
+    assert pa == ["yes"]
+    assert pb == ["yes"]
+
+
+def test_aligned_treats_missing_failed_field_as_no_failures():
+    """Old-format result JSONs (generated before the failed field existed)
+    must keep working exactly as before."""
+    a = {"ids": [1, 2], "y_true": ["yes", "no"], "y_pred": ["yes", "no"]}
+    b = {"ids": [1, 2], "y_true": ["yes", "no"], "y_pred": ["yes", "yes"]}
+
+    gt, pa, pb = aligned(a, b)
+
+    assert gt == ["yes", "no"]
+    assert pb == ["yes", "yes"]
+
+
 def test_format_p_does_not_collapse_a_tiny_real_effect_to_zero():
     """round(p, 4) turned real McNemar p-values (~1e-11 on the parent-
     expansion contrast) into the literal string "0.0000" -- this is the
