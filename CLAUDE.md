@@ -38,7 +38,7 @@ cp .env.example .env                      # then set ARANGO_PASS / NEO4J_PASSWOR
 
 # Quality (what CI runs — CPU only, no DB/LLM/GPU needed)
 make test        # pytest  (100+ tests; testpaths = tests/ + backend/)
-make lint        # ruff check src scripts tests app
+make lint        # ruff check src scripts tests app backend
 make format      # ruff check --fix ...
 pytest tests/test_results_regression.py -v   # the eval regression gate specifically
 
@@ -116,8 +116,8 @@ blueprint), frontend → Vercel, dashboard → Streamlit Community Cloud. See
   app, and the frontend all strip it. Don't remove the stripping.
 - **`num_predict` caps generation on purpose** (config.py) so a runaway reasoning
   chain can't stall Ollama; the extractor tolerates truncation. Don't uncap it.
-- **`decompose`/`extract` provider tasks are defined but never called** — only
-  `synthesize` is wired. Don't assume a decomposition pipeline exists (GAPS #4).
+- **`synthesize` is the only provider task** — there is no decompose/extract
+  pipeline (that dead scaffolding was removed; GAPS #4 is marked fixed).
 - **`run_benchmark.py`'s Ollama auto-restart uses `pkill`** — a no-op on Windows.
   Benchmark is effectively Linux/Colab-only.
 - **The hosted tier and the benchmark use different encoder *runtimes*, same

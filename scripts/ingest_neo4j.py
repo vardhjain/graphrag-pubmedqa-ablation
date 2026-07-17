@@ -20,7 +20,6 @@ Run ONCE before the hosted demo can answer with real graph expansion:
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 import time
@@ -120,10 +119,6 @@ def ingest_labeled_split(driver, model, batch_size: int = 50) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.parse_args()
-
     cfg = Neo4jConfig()
     driver = connect_neo4j(cfg)
     setup_constraints(driver)
