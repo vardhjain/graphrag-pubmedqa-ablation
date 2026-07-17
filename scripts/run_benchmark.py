@@ -30,7 +30,7 @@ import requests
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-ARMS = ("plain", "plain_rr", "graph", "graph_concepts")
+ARMS = ("plain", "plain_rr", "graph", "graph_concepts", "graph_norr")
 MAX_TRIES = 3
 CHECKPOINT_EVERY = 25
 
@@ -95,6 +95,12 @@ def build_retriever(arm, store, encoder, reranker, db):
         return GraphRetriever(store, encoder, db, reranker=reranker, use_concepts=False)
     if arm == "graph_concepts":
         return GraphRetriever(store, encoder, db, reranker=reranker, use_concepts=True)
+    if arm == "graph_norr":
+        # Parent-expansion without the reranker -- the exact configuration
+        # the hosted demo actually runs (render.yaml: KGQA_SKIP_RERANKER=true,
+        # a 512MB-tier memory concession), which the plain_rr/graph/
+        # graph_concepts ladder alone never measures in isolation.
+        return GraphRetriever(store, encoder, db, reranker=None, use_concepts=False)
     raise ValueError(f"unknown arm: {arm}")
 
 
@@ -132,7 +138,7 @@ def main():
     print(f"[Corpus] {len(store):,} chunks loaded.")
 
     encoder = load_encoder()
-    reranker = load_reranker() if args.arm != "plain" else None
+    reranker = load_reranker() if args.arm not in ("plain", "graph_norr") else None
 
     retriever = build_retriever(args.arm, store, encoder, reranker, db)
     samples = load_benchmark_samples(n=n, seed=seed)
