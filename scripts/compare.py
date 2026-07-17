@@ -64,6 +64,42 @@ def format_p(p: float) -> str:
     return "<0.0001" if p < 0.0001 else f"{p:.4f}"
 
 
+def wilson_ci(p_hat: float, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score 95% confidence interval for a binomial proportion.
+
+    At n~200, a point accuracy carries roughly +/-7pp of sampling
+    uncertainty that the bare percentage never discloses -- Wilson (not the
+    normal/Wald approximation) because it stays well-behaved and inside
+    [0, 1] even for proportions near 0 or 1 or samples this small.
+    """
+    if n <= 0:
+        return (0.0, 0.0)
+    denom = 1 + z ** 2 / n
+    center = (p_hat + z ** 2 / (2 * n)) / denom
+    margin = (z * ((p_hat * (1 - p_hat) / n + z ** 2 / (4 * n ** 2)) ** 0.5)) / denom
+    return (max(0.0, center - margin), min(1.0, center + margin))
+
+
+def holm_adjust(p_values: list[float]) -> list[float]:
+    """Holm-Bonferroni step-down correction, returned in the input's order.
+
+    Testing m contrasts at a raw alpha=0.05 each inflates the family-wise
+    false-positive rate; Holm controls it while staying less conservative
+    than a flat Bonferroni divide-by-m. The parent-expansion contrast's
+    p~1e-11 survives either way -- reporting the correction costs nothing
+    and heads off exactly the objection a project built on statistical
+    rigor should expect.
+    """
+    m = len(p_values)
+    order = sorted(range(m), key=lambda i: p_values[i])
+    adjusted = [0.0] * m
+    running_max = 0.0
+    for rank, idx in enumerate(order):
+        running_max = max(running_max, p_values[idx] * (m - rank))
+        adjusted[idx] = min(1.0, running_max)
+    return adjusted
+
+
 def aligned(a, b):
     """Align two arms' predictions on shared pubids (same seed -> same order),
     excluding any id where either arm's LLM call failed (recorded as a
@@ -97,9 +133,9 @@ def main():
         print(f"No results found in {RESULTS_DIR}. Run scripts/run_benchmark.py first.")
         sys.exit(1)
 
-    lines = ["| Arm | Accuracy | Macro F1 | Recall@k | Avg latency (s) | n |",
+    lines = ["| Arm | Accuracy (95% CI) | Macro F1 | Recall@k | Avg latency (s) | n |",
              "| --- | --- | --- | --- | --- | --- |"]
-    arms_json, contrasts_json, max_n = [], [], 0
+    arms_json, max_n = [], 0
     print("\n" + "=" * 64)
     print("  RESULTS SUMMARY")
     print("=" * 64)
@@ -112,12 +148,17 @@ def main():
         n_failed = r.get("n_failed", 0)
         recall_k = r.get("recall_at_k")  # None for result JSONs predating this metric
         recall_display = f"{recall_k * 100:.1f}%" if recall_k is not None else "n/a"
+        ci_lo, ci_hi = wilson_ci(r["accuracy"], n)
+        ci_display = f"{ci_lo * 100:.1f}–{ci_hi * 100:.1f}%"
         max_n = max(max_n, n)
         failed_note = f"  failed={n_failed}" if n_failed else ""
-        print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  recall@k={recall_display:>6}  "
-              f"lat={lat:5.1f}s  n={n}{failed_note}")
-        lines.append(f"| {arm} | {acc:.2f}% | {f1:.2f}% | {recall_display} | {lat:.1f} | {n} |")
-        arms_json.append({"arm": arm, "accuracy": round(acc, 2), "macro_f1": round(f1, 2),
+        print(f"  {arm:<16} acc={acc:6.2f}%  ci=[{ci_display}]  f1={f1:6.2f}%  "
+              f"recall@k={recall_display:>6}  lat={lat:5.1f}s  n={n}{failed_note}")
+        lines.append(f"| {arm} | {acc:.2f}% ({ci_display}) | {f1:.2f}% | {recall_display} "
+                     f"| {lat:.1f} | {n} |")
+        arms_json.append({"arm": arm, "accuracy": round(acc, 2),
+                          "accuracy_ci95": [round(ci_lo * 100, 2), round(ci_hi * 100, 2)],
+                          "macro_f1": round(f1, 2),
                           "recall_at_k": round(recall_k, 4) if recall_k is not None else None,
                           "avg_latency": round(lat, 1), "samples": n, "n_failed": n_failed,
                           "adds": ARM_ADDS.get(arm, "")})
@@ -125,9 +166,13 @@ def main():
     print("\n" + "=" * 64)
     print("  PAIRED McNEMAR TESTS (adjacent ablation contrasts)")
     print("=" * 64)
-    lines += ["", "### Significance (paired McNemar)", "",
-              "| Contrast | Δacc (pp) | gains | losses | p | sig? |",
-              "| --- | --- | --- | --- | --- | --- |"]
+    lines += ["", "### Significance (paired McNemar, Holm-adjusted for multiple comparisons)", "",
+              "| Contrast | Δacc (pp) | gains | losses | p | p (Holm) | sig? |",
+              "| --- | --- | --- | --- | --- | --- | --- |"]
+
+    # Two passes: Holm's adjustment needs every contrast's raw p-value before
+    # any of them can be corrected, so compute them all first.
+    raw = []
     for a_name, b_name, desc in CONTRASTS:
         if a_name not in results or b_name not in results:
             continue
@@ -137,22 +182,36 @@ def main():
         test = mcnemar_test(gt, pa, pb)
         acc_a = sum(p == g for p, g in zip(pa, gt, strict=False)) / len(gt)
         acc_b = sum(p == g for p, g in zip(pb, gt, strict=False)) / len(gt)
-        d = (acc_b - acc_a) * 100
-        sig = "yes" if test["significant_at_0.05"] else "no"
-        p_display = format_p(test["p_value"])
-        print(f"  {a_name} -> {b_name}  ({desc})")
+        raw.append({"a_name": a_name, "b_name": b_name, "desc": desc,
+                   "delta_acc": (acc_b - acc_a) * 100, "test": test})
+
+    holm_p = holm_adjust([r["test"]["p_value"] for r in raw])
+
+    contrasts_json = []
+    for r, p_holm in zip(raw, holm_p, strict=True):
+        test, d = r["test"], r["delta_acc"]
+        sig_holm = p_holm < 0.05
+        sig = "yes" if sig_holm else "no"
+        p_display, p_holm_display = format_p(test["p_value"]), format_p(p_holm)
+        print(f"  {r['a_name']} -> {r['b_name']}  ({r['desc']})")
         print(f"      Δacc={d:+.2f}pp  gains={test['b_gains']}  losses={test['c_losses']}"
-              f"  p={p_display}  sig={sig}")
-        lines.append(f"| {a_name} → {b_name} ({desc}) | {d:+.2f} | {test['b_gains']} "
-                     f"| {test['c_losses']} | {p_display} | {sig} |")
-        contrasts_json.append({"from": a_name, "to": b_name, "effect": desc,
+              f"  p={p_display}  p(Holm)={p_holm_display}  sig={sig}")
+        lines.append(f"| {r['a_name']} → {r['b_name']} ({r['desc']}) | {d:+.2f} | {test['b_gains']} "
+                     f"| {test['c_losses']} | {p_display} | {p_holm_display} | {sig} |")
+        contrasts_json.append({"from": r["a_name"], "to": r["b_name"], "effect": r["desc"],
                                "delta_acc": round(d, 2), "gains": test["b_gains"],
                                "losses": test["c_losses"],
                                # Full precision, not rounded to 4dp -- a real
                                # p~1e-11 must not collapse to the literal 0.0.
                                "p_value": test["p_value"],
                                "p_display": p_display,
-                               "significant": test["significant_at_0.05"]})
+                               "p_holm": p_holm,
+                               "p_holm_display": p_holm_display,
+                               # "significant" now reflects the Holm-adjusted
+                               # p-value, not the raw per-contrast one --
+                               # the more defensible number when reporting
+                               # several tests from the same benchmark run.
+                               "significant": sig_holm})
 
     md_path = os.path.join(RESULTS_DIR, "summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
