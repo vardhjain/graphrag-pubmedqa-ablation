@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## GraphRAG PubMedQA — frontend
 
-## Getting Started
+Next.js chat UI for the hosted agent (see [`../backend/`](../backend/) for
+the FastAPI service it talks to). Deployed at
+[graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app).
 
-First, run the development server:
+### Pages
+
+| Route | What it is |
+| --- | --- |
+| `/` | The chat itself (`components/ChatPanel.tsx`) — ask a biomedical question, get an answer with cited PubMed IDs and a reasoning-path graph of the retrieval behind it. |
+| `/benchmark` | Reads `../results/summary.json` directly at build time (`lib/results.ts`) and renders the 4-arm ablation table + McNemar significance tests. No API calls, no live backend needed. |
+| `/case-study` | The project's own "confounded demo → fair ablation" narrative, plus the engineering story behind hosting it. |
+
+### Local dev
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev          # -> http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires one env var, in `.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+NEXT_PUBLIC_API_URL=http://localhost:8000    # or the deployed Render URL
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Points the chat page (`lib/api.ts`) at the FastAPI backend's `/query` and
+`/health` endpoints. Without it, `askQuestion`/`warmUpBackend` fall back to
+`http://localhost:8000`.
 
-## Learn More
+### Vercel deploy note
 
-To learn more about Next.js, take a look at the following resources:
+If this project's Root Directory is set to `frontend`, enable "Include
+source files outside of the Root Directory in the Build Step" in the Vercel
+project settings — `/benchmark` reads `../results/summary.json` from outside
+this directory at build time, and the build fails to find it otherwise.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Built with [Next.js](https://nextjs.org) (`create-next-app`) + Tailwind +
+[React Flow](https://reactflow.dev) for the reasoning-path visualization.

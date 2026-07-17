@@ -263,13 +263,19 @@ pins that the two return identical results.
 
 ## 13. Minor inconsistencies and polish — LOW / trivial
 
-- **`frontend/README.md`** is untouched `create-next-app` boilerplate — says
-  nothing about this project, the API contract, or `NEXT_PUBLIC_API_URL`. Replace
-  with a few lines describing the chat + benchmark pages and the env var.
-- **`FakeEncoder` uses Python `hash()`** (`tests/conftest.py:22`), which is
-  salted per-process. Tests pass because hashing is stable *within* a run, but
-  the vectors are meaningless across runs — fine for ranking tests, but a reader
-  may assume determinism that isn't there. A comment would help.
+- ~~**`frontend/README.md`** is untouched `create-next-app` boilerplate~~ —
+  **FIXED (2026-07-17):** replaced with a description of the three pages
+  (`/`, `/benchmark`, `/case-study`), the `NEXT_PUBLIC_API_URL` env var, and
+  the Vercel "include source files outside Root Directory" gotcha (needed
+  since `/benchmark` reads `../results/summary.json` at build time).
+- ~~**`FakeEncoder` uses Python `hash()`**~~ — **already stale when written**:
+  `tests/conftest.py` was fixed to use an MD5-based `_stable_hash` (with a
+  comment explaining exactly why) by commit `968ea5f`, "Fix flaky test
+  fixture: FakeEncoder used process-randomized hash()" — before this GAPS
+  entry was last touched. Worth remembering alongside GAPS #11's own
+  correction: an entry can go stale by the code catching up to it, not just
+  by the code drifting away from it — re-check before assuming a listed item
+  is still live.
 - **`FuzzyEvaluator` defaults unparseable output to `"maybe"`**
   (`evaluation.py:27,51`). This is a documented, deliberate choice, but it biases
   errors toward the rare `maybe` class and can flatter/penalize an arm depending
