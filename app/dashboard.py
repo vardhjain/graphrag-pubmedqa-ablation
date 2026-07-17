@@ -13,13 +13,11 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 
 import pandas as pd
 import streamlit as st
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(ROOT, "src"))
 RESULTS_DIR = os.path.join(ROOT, "results")
 ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts"]
 LABELS = ["yes", "no", "maybe"]
