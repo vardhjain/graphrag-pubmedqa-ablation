@@ -292,7 +292,7 @@ The macro-F1 / accuracy gap on the graph arms reflects weak recall on the rare
 
 ```bash
 make install-dev    # deps for tests + lint
-make test           # pytest — 79+ tests, all CPU, no external services
+make test           # pytest — 100+ tests, all CPU, no external services
 make lint           # ruff
 make help           # all shortcuts (ingest, benchmark, compare, ...)
 ```
