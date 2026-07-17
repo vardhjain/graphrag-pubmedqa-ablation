@@ -131,6 +131,12 @@ def test_graph_degrades_to_raw_chunks_on_db_error(fake_encoder, fake_reranker):
     ctx = r.retrieve("aspirin heart attack")
     assert "=== STUDY 1 ===" in ctx
     assert "aspirin" in ctx
+    # GAPS #10: a degrade must be counted, not just print()ed -- a mass-degrade
+    # would otherwise quietly turn this arm's numbers into plain-arm numbers
+    # with nothing but an easy-to-miss log line saying so.
+    assert r._degraded_count == 1
+    r.retrieve("statins cholesterol")
+    assert r._degraded_count == 2  # accumulates across questions, not a bool
 
 
 def test_chat_returns_answer_and_source_pubids(fake_encoder, fake_reranker, monkeypatch):
