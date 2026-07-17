@@ -113,23 +113,32 @@ single-abstract dataset. We report that honestly rather than bury it — see
 src/kgqa/                 importable package — single source of truth
   config.py               all shared constants (models, top-k, seed, n)
   prompts.py              benchmark/chat prompts (identical across arms)
-  llm.py                  Ollama client
+  llm.py                  Ollama client (benchmark path)
+  providers.py            multi-provider LLM chain (hosted path: Gemini + Ollama fallback)
   data.py                 seeded sampling + canonical chunking
   evaluation.py           answer extraction, metrics, McNemar test
-  models.py               encoder / reranker / ArangoDB loaders
+  models.py               encoder (torch + ONNX) / reranker / ArangoDB loaders
+  service.py              graphrag.answer() -- the hosted agent's one entry point
   retrieval/
     base.py               ChunkStore + BaseRetriever (encode→rerank→select)
     plain.py              plain, plain_rr arms
-    graph.py              graph, graph_concepts arms
+    graph.py              graph, graph_concepts arms (ArangoDB backend)
+    neo4j_graph.py         same arms, Neo4j backend (hosted demo graph)
+src/graphrag/             thin re-export of kgqa.service.answer for backend/
 scripts/
   ingest.py               build the leakage-free graph in ArangoDB (run once)
+  ingest_neo4j.py         seed the hosted demo's Neo4j graph (run once)
   run_benchmark.py        run one arm: --arm {plain,plain_rr,graph,graph_concepts}
   compare.py              summary table + McNemar + ablation figure
+  verify_onnx_parity.py   proves the ONNX and torch encoders agree
 notebooks/
   01_ingest.ipynb         thin Colab wrapper for ingestion
   02_benchmark.ipynb      thin Colab wrapper for all arms + comparison
-tests/                    pytest suite (runs on CPU, no Ollama/ArangoDB needed)
-docs/                     project report (PDF) and slides (PPTX)
+backend/                  FastAPI hosted agent (Render) -- REST + MCP endpoint
+frontend/                 Next.js chat UI + reasoning-path viz (Vercel)
+app/                      Gradio chat demo + Streamlit results dashboard
+tests/, backend/test_*.py pytest suite (runs on CPU, no Ollama/ArangoDB/Neo4j needed)
+docs/                     project report (PDF), slides (PPTX), GitHub Pages site
 ```
 
 ## 🧰 Stack
@@ -279,7 +288,7 @@ The macro-F1 / accuracy gap on the graph arms reflects weak recall on the rare
 
 ```bash
 make install-dev    # deps for tests + lint
-make test           # pytest — 17 tests, all CPU, no external services
+make test           # pytest — 79+ tests, all CPU, no external services
 make lint           # ruff
 make help           # all shortcuts (ingest, benchmark, compare, ...)
 ```
