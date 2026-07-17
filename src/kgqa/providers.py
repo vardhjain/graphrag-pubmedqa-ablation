@@ -14,6 +14,7 @@ API keys configured at all (e.g. in tests or offline dev).
 from __future__ import annotations
 
 import os
+import time
 
 import requests
 
@@ -27,24 +28,74 @@ GEMINI_API_URL = (
 )
 
 
+# Gemini's free tier answers 429 (rate limit) and 503 ("model is currently
+# experiencing high demand") often enough that a single attempt makes the
+# hosted demo look broken for reasons that have nothing to do with it -- seen
+# live. These are transient by definition, so retry them; anything else (401,
+# 400, a bad model name) is a real error and fails immediately.
+_GEMINI_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
+_GEMINI_MAX_ATTEMPTS = 3
+_GEMINI_BACKOFF_SECONDS = 2.0
+
+
 def call_gemini(prompt: str, system: str = "", temperature: float = LLM_TEMPERATURE) -> str:
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set")
     text = f"{system}\n\n{prompt}" if system else prompt
-    resp = requests.post(
-        GEMINI_API_URL,
-        params={"key": GEMINI_API_KEY},
-        json={
-            "contents": [{"parts": [{"text": text}]}],
-            "generationConfig": {"temperature": temperature},
-        },
-        timeout=60,
-    )
-    try:
-        resp.raise_for_status()
-    except requests.HTTPError as exc:
-        raise RuntimeError(f"Gemini {resp.status_code}: {resp.text[:500]}") from exc
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    last_error: Exception | None = None
+
+    for attempt in range(_GEMINI_MAX_ATTEMPTS):
+        if attempt:
+            # Exponential: 2s, then 4s. Bounded well under the client's own
+            # timeout budget so a retry can't turn into a hang.
+            time.sleep(_GEMINI_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+        try:
+            resp = requests.post(
+                GEMINI_API_URL,
+                # Header, not a query param: keys in URLs leak into proxy logs
+                # and request traces.
+                headers={"x-goog-api-key": GEMINI_API_KEY},
+                json={
+                    "contents": [{"parts": [{"text": text}]}],
+                    "generationConfig": {"temperature": temperature},
+                },
+                timeout=60,
+            )
+        except requests.RequestException as exc:  # connection reset, read timeout, ...
+            last_error = RuntimeError(f"Gemini request failed: {exc}")
+            continue
+
+        if resp.status_code in _GEMINI_RETRY_STATUSES:
+            last_error = RuntimeError(f"Gemini {resp.status_code}: {resp.text[:500]}")
+            continue
+        try:
+            resp.raise_for_status()
+        except requests.HTTPError as exc:
+            raise RuntimeError(f"Gemini {resp.status_code}: {resp.text[:500]}") from exc
+        return _gemini_text(resp.json())
+
+    raise last_error if last_error else RuntimeError("Gemini call failed")
+
+
+def _gemini_text(payload: dict) -> str:
+    """Pull the answer out of a Gemini response, naming what went wrong.
+
+    A 200 doesn't guarantee text: the model can return a candidate with no
+    parts when it stops for safety filtering or hits the token cap. Indexing
+    blindly turns that into an opaque KeyError/IndexError in the logs, so
+    surface ``finishReason`` instead -- it's the difference between a
+    diagnosable failure and a mystery.
+    """
+    candidates = payload.get("candidates") or []
+    if not candidates:
+        feedback = payload.get("promptFeedback", {})
+        raise RuntimeError(f"Gemini returned no candidates (promptFeedback={feedback})")
+    candidate = candidates[0]
+    parts = candidate.get("content", {}).get("parts") or []
+    if not parts:
+        reason = candidate.get("finishReason", "unknown")
+        raise RuntimeError(f"Gemini returned no text (finishReason={reason})")
+    return parts[0]["text"]
 
 
 def _call_ollama_task(prompt: str, system: str = "", temperature: float = LLM_TEMPERATURE) -> str:
