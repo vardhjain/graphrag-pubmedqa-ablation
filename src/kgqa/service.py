@@ -55,13 +55,30 @@ _RETRIEVER_LOCK = threading.Lock()
 
 
 def _shared_encoder():
+    """``KGQA_ENCODER=onnx`` swaps in the torch-free ONNX encoder (see
+    ``models.load_onnx_encoder``) -- same weights and vector space as the
+    default, but without torch resident. That difference is what makes the
+    hosted demo possible at all: measured locally, loading the encoder plus
+    the demo store costs ~700MB on the torch path vs ~290MB on the ONNX one,
+    against a 512MB tier -- i.e. the torch path could never have fit, which
+    is exactly the OOM that was killing /query mid-request.
+
+    Unset the variable to roll back to the original sentence-transformers
+    path, byte-for-byte unchanged (the benchmark always calls
+    ``load_encoder`` directly and never reads this gate). Read from the
+    environment at call time, not import time, same as ``KGQA_SKIP_RERANKER``
+    below.
+    """
     global _ENCODER
     if _ENCODER is None:
         with _ENCODER_LOCK:
             if _ENCODER is None:
-                from .models import load_encoder
+                from . import models
 
-                _ENCODER = load_encoder()
+                if os.environ.get("KGQA_ENCODER", "").lower() == "onnx":
+                    _ENCODER = models.load_onnx_encoder()
+                else:
+                    _ENCODER = models.load_encoder()
     return _ENCODER
 
 

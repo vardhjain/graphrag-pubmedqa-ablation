@@ -20,10 +20,19 @@ services:
     # answer or cache anything. Render's native-runtime build output persists
     # onto the same instance's disk for that deploy, so this cache survives
     # ordinary process restarts within a deploy (though not a fresh deploy).
+    # The third command prewarms the ONNX export + tokenizer that the
+    # KGQA_ENCODER=onnx runtime path (below) actually loads. The
+    # sentence-transformers prewarm is kept even though the torch path is
+    # normally dormant here: it is the rollback safety net -- unsetting
+    # KGQA_ENCODER must land on a torch path whose files exist locally,
+    # or it would die under HF_HUB_OFFLINE=1 with LocalEntryNotFoundError.
     buildCommand: >-
       pip install -r backend/requirements.txt &&
       python -c "from sentence_transformers import SentenceTransformer;
-      SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+      SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')" &&
+      python -c "from huggingface_hub import hf_hub_download;
+      hf_hub_download('sentence-transformers/all-MiniLM-L6-v2', 'onnx/model.onnx');
+      hf_hub_download('sentence-transformers/all-MiniLM-L6-v2', 'tokenizer.json')"
     # HF_HUB_OFFLINE=1 is set only here (runtime), not as a service-wide
     # envVar -- envVars apply to the build step too, and setting it globally
     # made the buildCommand's own prewarm download fail (offline mode was
@@ -54,6 +63,19 @@ services:
       # network calls and succeeds.
       - key: HF_HOME
         value: .render-cache/huggingface
+      # Torch-free ONNX encoder (same weights, same 384-dim vector space, so
+      # the vectors already in Neo4j still work -- see
+      # src/kgqa/models.py:OnnxEncoder). This is what makes the demo fit:
+      # measured locally, encoder + demo store is ~700MB on the torch path vs
+      # ~290MB on this one, against 512MB here -- torch was never going to
+      # fit, which is the OOM that kept killing /query mid-request even after
+      # the caching fixes above. Unset to roll back to the torch path (still
+      # installed and prewarmed above exactly for that reason).
+      # NOTE: like CORS_ORIGINS below, Render does NOT auto-sync this from
+      # render.yaml on an existing service -- mirror it into the dashboard's
+      # Environment tab by hand.
+      - key: KGQA_ENCODER
+        value: onnx
       # Render's free plan is 512MB RAM -- loading both the encoder and the
       # cross-encoder reranker (each a full torch model) OOM-killed the
       # instance in practice. Skip the reranker on this tier; retrievers

@@ -13,3 +13,11 @@ uvicorn[standard]>=0.29
 # MCP tool surface (mounted at /mcp) -- lets MCP clients (Claude Code, Claude
 # Desktop, Cursor, ...) use this agent as a tool via one URL.
 mcp>=1.9
+
+# Torch-free ONNX encoder for the 512MB tier (KGQA_ENCODER=onnx -- see
+# src/kgqa/models.py:load_onnx_encoder and render.yaml). The CPU-torch pin
+# above stays: sentence-transformers (via ../requirements.txt) would
+# otherwise pull the CUDA torch wheel, and the torch path is the rollback.
+onnxruntime>=1.17,<2
+tokenizers>=0.19          # imported directly by OnnxEncoder, not just transitively
+huggingface_hub>=0.23     # imported directly (hf_hub_download)
