@@ -143,9 +143,10 @@ def main():
     for i, s in enumerate(samples):
         t0 = time.time()
         raw = None
+        retrieved_papers: list[str] = []
         for attempt in range(1, MAX_TRIES + 1):
             try:
-                raw = retriever.answer_benchmark(s.question)
+                raw, retrieved_papers = retriever.answer_benchmark(s.question)
                 break
             except Exception as exc:
                 print(f"      [warn] q{i + 1} attempt {attempt}/{MAX_TRIES} failed: "
@@ -163,7 +164,8 @@ def main():
             icon = "v" if pred == s.final_decision.lower().strip() else "x"
             print(f"[{i + 1:3d}]  GT={s.final_decision:<5}  Pred={pred:<5}  {icon}  ({latency:.1f}s)")
 
-        evaluator.record(s.final_decision, pred, latency, sample_id=s.pubid, failed=(raw is None))
+        evaluator.record(s.final_decision, pred, latency, sample_id=s.pubid,
+                        failed=(raw is None), retrieved_papers=retrieved_papers)
         if (i + 1) % CHECKPOINT_EVERY == 0:
             evaluator.save(out_path)  # checkpoint partial progress
 

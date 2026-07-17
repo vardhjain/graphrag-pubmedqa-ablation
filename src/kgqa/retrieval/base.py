@@ -222,10 +222,26 @@ class BaseRetriever(ABC):
     def retrieve(self, query: str) -> str:
         return self._build_context(query, self._select(query))
 
-    def answer_benchmark(self, question: str) -> str:
-        context = self.retrieve(question)
-        return call_ollama(build_prompt(context, question),
-                           system=BENCHMARK_SYSTEM_PROMPT)
+    def answer_benchmark(self, question: str) -> tuple[str, list[str]]:
+        """Ollama answer + the paper keys initially retrieved for it.
+
+        The retrieved set is deliberately ``_select()``'s output (pre any
+        graph expansion), not the graph arms' post-expansion paper set --
+        retrieval is identical across all 4 arms (only reranking differs,
+        which reorders/filters a shared pool but doesn't change which
+        papers are in it), so recall@k computed from this set measures
+        whether accuracy differences come from *retrieving different
+        papers* or from *presenting the same retrieved paper differently*.
+        That's this project's own headline claim (RESULTS.md: "the graph
+        helps by deepening context, not by broadening it") -- this is what
+        lets it be checked rather than just asserted.
+        """
+        candidates = self._select(question)
+        context = self._build_context(question, candidates)
+        answer = call_ollama(build_prompt(context, question),
+                             system=BENCHMARK_SYSTEM_PROMPT)
+        retrieved_papers = list(dict.fromkeys(c.paper_key for c in candidates))
+        return answer, retrieved_papers
 
     def chat(self, question: str, temperature: float = 0.3) -> dict:
         """Conversational answer plus the source paper pubids it retrieved.

@@ -236,3 +236,21 @@ def test_from_arango_cache_hit_skips_the_query_entirely(tmp_path):
 
     assert store.ids == ["Chunks/1_0", "Chunks/2_0"]
     assert db.aql.execute_calls == []
+
+
+def test_answer_benchmark_returns_answer_and_retrieved_paper_keys(fake_encoder, fake_reranker, monkeypatch):
+    """recall@k (src/kgqa/evaluation.py) needs the paper keys _select()
+    retrieved, not just the LLM's answer text -- this is the contract that
+    supplies them."""
+    import kgqa.retrieval.base as base
+
+    store = make_store(fake_encoder)
+    retriever = PlainRetriever(store, fake_encoder, reranker=fake_reranker)
+    monkeypatch.setattr(base, "call_ollama", lambda prompt, system="": "Final Answer: yes")
+
+    answer, retrieved_papers = retriever.answer_benchmark("does aspirin help heart attack risk")
+
+    assert answer == "Final Answer: yes"
+    assert retrieved_papers  # non-empty
+    assert all(isinstance(k, str) for k in retrieved_papers)
+    assert len(retrieved_papers) == len(set(retrieved_papers))  # de-duplicated

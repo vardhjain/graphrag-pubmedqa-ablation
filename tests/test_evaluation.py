@@ -46,6 +46,34 @@ def test_evaluator_tracks_failed_calls_separately_from_predictions():
     assert s["samples"] == 2  # failures still counted in samples/accuracy
 
 
+def test_recall_at_k_scores_gold_paper_membership():
+    """The gold paper is the question's own source paper -- sample_id is set
+    to that same pubid by convention (run_benchmark.py), so recall@k is just
+    'is sample_id in retrieved_papers for that sample'."""
+    ev = Evaluator("graph")
+    ev.record("yes", "yes", 1.0, sample_id="1", retrieved_papers=["1", "9"])  # hit
+    ev.record("no", "no", 1.0, sample_id="2", retrieved_papers=["8", "9"])  # miss
+    ev.record("yes", "yes", 1.0, sample_id="3", retrieved_papers=["3"])  # hit
+
+    assert abs(ev.recall_at_k() - 2 / 3) < 1e-9
+
+
+def test_recall_at_k_excludes_failed_samples_not_just_scores_them_as_misses():
+    """A failed LLM call means retrieved_papers reflects whatever partial
+    attempt happened (or nothing) -- not a genuine retrieval-quality signal,
+    so it must be excluded from the denominator, not counted as a miss."""
+    ev = Evaluator("graph")
+    ev.record("yes", "yes", 1.0, sample_id="1", retrieved_papers=["1"])  # hit
+    ev.record("no", "maybe", 1.0, sample_id="2", retrieved_papers=[], failed=True)  # excluded
+
+    assert ev.recall_at_k() == 1.0  # only the 1 valid sample counts, and it's a hit
+
+
+def test_recall_at_k_is_zero_with_no_scorable_samples():
+    ev = Evaluator("graph")
+    assert ev.recall_at_k() == 0.0
+
+
 def test_mcnemar_detects_one_sided_gain():
     gt = ["yes"] * 10
     a = ["no"] * 10           # arm A always wrong

@@ -90,8 +90,8 @@ def main():
         print(f"No results found in {RESULTS_DIR}. Run scripts/run_benchmark.py first.")
         sys.exit(1)
 
-    lines = ["| Arm | Accuracy | Macro F1 | Avg latency (s) | n |",
-             "| --- | --- | --- | --- | --- |"]
+    lines = ["| Arm | Accuracy | Macro F1 | Recall@k | Avg latency (s) | n |",
+             "| --- | --- | --- | --- | --- | --- |"]
     arms_json, contrasts_json, max_n = [], [], 0
     print("\n" + "=" * 64)
     print("  RESULTS SUMMARY")
@@ -103,11 +103,15 @@ def main():
         acc, f1 = r["accuracy"] * 100, r.get("macro_f1", 0) * 100
         lat, n = r["avg_latency"], r["samples"]
         n_failed = r.get("n_failed", 0)
+        recall_k = r.get("recall_at_k")  # None for result JSONs predating this metric
+        recall_display = f"{recall_k * 100:.1f}%" if recall_k is not None else "n/a"
         max_n = max(max_n, n)
         failed_note = f"  failed={n_failed}" if n_failed else ""
-        print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  lat={lat:5.1f}s  n={n}{failed_note}")
-        lines.append(f"| {arm} | {acc:.2f}% | {f1:.2f}% | {lat:.1f} | {n} |")
+        print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  recall@k={recall_display:>6}  "
+              f"lat={lat:5.1f}s  n={n}{failed_note}")
+        lines.append(f"| {arm} | {acc:.2f}% | {f1:.2f}% | {recall_display} | {lat:.1f} | {n} |")
         arms_json.append({"arm": arm, "accuracy": round(acc, 2), "macro_f1": round(f1, 2),
+                          "recall_at_k": round(recall_k, 4) if recall_k is not None else None,
                           "avg_latency": round(lat, 1), "samples": n, "n_failed": n_failed,
                           "adds": ARM_ADDS.get(arm, "")})
 

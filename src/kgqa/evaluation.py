@@ -48,10 +48,16 @@ class Evaluator:
     # attributing a timeout to "the retrieval strategy" would contaminate
     # the one number this project's whole ablation exists to get right.
     failed: list = field(default_factory=list)
+    # Paper keys _select() retrieved for this question, pre any graph
+    # expansion -- retrieval is identical across all 4 arms (only reranking
+    # differs), so recall@k over this set tests whether accuracy differences
+    # come from retrieving different papers or from presenting the same
+    # retrieved paper differently. See BaseRetriever.answer_benchmark.
+    retrieved_papers: list = field(default_factory=list)
 
     def record(self, ground_truth: str, prediction: str,
                latency: float = 0.0, sample_id: str | None = None,
-               failed: bool = False) -> None:
+               failed: bool = False, retrieved_papers: list | None = None) -> None:
         pred = prediction.lower().strip()
         if pred not in LABELS:
             pred = "maybe"
@@ -60,9 +66,26 @@ class Evaluator:
         self.latencies.append(latency)
         self.ids.append(sample_id)
         self.failed.append(failed)
+        self.retrieved_papers.append(retrieved_papers or [])
 
     def n_failed(self) -> int:
         return sum(self.failed)
+
+    def recall_at_k(self) -> float:
+        """Fraction of (non-failed) samples where the gold paper -- the
+        question's own source paper, i.e. PubMedQA's pubid -- appears among
+        the papers _select() retrieved. Isolates retrieval quality from the
+        LLM synthesis step. Only scored where sample_id was set to the gold
+        pubid (run_benchmark.py's convention); a genuinely empty retrieval
+        counts as a miss, not an exclusion."""
+        scored = [
+            (sid, papers) for sid, papers, failed in
+            zip(self.ids, self.retrieved_papers, self.failed, strict=False)
+            if sid is not None and not failed
+        ]
+        if not scored:
+            return 0.0
+        return sum(1 for sid, papers in scored if sid in papers) / len(scored)
 
     # ── metrics ───────────────────────────────────────────────────────────────
     def accuracy(self) -> float:
@@ -84,12 +107,14 @@ class Evaluator:
             "macro_f1": self.macro_f1(),
             "samples": len(self.y_true),
             "n_failed": self.n_failed(),
+            "recall_at_k": self.recall_at_k(),
             "total_time": sum(self.latencies),
             "avg_latency": self.avg_latency(),
             "y_true": self.y_true,
             "y_pred": self.y_pred,
             "ids": self.ids,
             "failed": self.failed,
+            "retrieved_papers": self.retrieved_papers,
         }
 
     def report(self) -> dict:
@@ -105,6 +130,7 @@ class Evaluator:
                   "excluded from paired significance tests, see compare.py)")
         print(f"  Accuracy  : {self.accuracy():.2%}")
         print(f"  Macro F1  : {self.macro_f1():.2%}")
+        print(f"  Recall@k  : {self.recall_at_k():.2%}  (gold paper among retrieved, pre-expansion)")
         print(f"  Avg/query : {self.avg_latency():.1f}s")
         print(f"{'-' * 52}")
         print(classification_report(self.y_true, self.y_pred,
