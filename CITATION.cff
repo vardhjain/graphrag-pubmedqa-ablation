@@ -6,7 +6,7 @@ authors:
   - given-names: Vardh
     family-names: Jain
     email: vardhjain20@gmail.com
-repository-code: "https://github.com/vardhjain/Knowledge_Graph_Question_Answering"
+repository-code: "https://github.com/vardhjain/graphrag-pubmedqa-ablation"
 abstract: >-
   A controlled 4-arm ablation (plain, plain_rr, graph, graph_concepts) on
   PubMedQA that isolates what a knowledge graph contributes to retrieval-augmented
