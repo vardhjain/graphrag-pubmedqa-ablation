@@ -188,9 +188,13 @@ python scripts/compare.py                             # table + McNemar + figure
 ```
 
 The benchmark is LLM-bound and benefits from a GPU. If you don't have one,
-**Google Colab** works well: run [`notebooks/01_ingest.ipynb`](notebooks/01_ingest.ipynb)
-once, then [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb) (set
-`ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets).
+**Google Colab** works well: run
+[`notebooks/01_ingest.ipynb`](notebooks/01_ingest.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/01_ingest.ipynb)
+once, then
+[`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/02_benchmark.ipynb)
+(set `ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets).
 
 ---
 
