@@ -37,6 +37,24 @@ def test_plain_context_is_raw_chunks(fake_encoder):
     assert "aspirin" in ctx
 
 
+def test_plain_retriever_has_chat(fake_encoder, monkeypatch):
+    """chat() belongs on BaseRetriever (every retriever, not just the graph
+    ones) -- PlainRetriever doesn't inherit GraphExpansionMixin, so if chat()
+    were ever misplaced onto that mixin instead, this is exactly the case
+    that would silently break while every graph-retriever test kept passing
+    (they inherit the mixin too, so they'd never notice)."""
+    import kgqa.retrieval.base as base
+
+    monkeypatch.setattr(base, "call_ollama", lambda *a, **k: "sure, yes")
+    store = make_store(fake_encoder)
+    r = PlainRetriever(store, fake_encoder, top_k_final=1)
+
+    out = r.chat("does aspirin reduce heart attack risk")
+
+    assert set(out) >= {"answer", "sources", "context"}
+    assert out["sources"] == ["1"]
+
+
 def test_both_graph_backends_share_the_expansion_mixin():
     """GAPS #9 regression guard: GraphRetriever (ArangoDB) and
     Neo4jGraphRetriever used to each carry their own byte-identical

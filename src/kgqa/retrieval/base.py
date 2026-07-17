@@ -252,6 +252,19 @@ class BaseRetriever(ABC):
         retrieved_papers = list(dict.fromkeys(c.paper_key for c in candidates))
         return answer, retrieved_papers
 
+    def chat(self, question: str, temperature: float = 0.3) -> dict:
+        """Conversational answer plus the source paper pubids it retrieved.
+
+        Runs retrieval once and returns the cited papers (their PubMedQA pubids,
+        which are real PubMed IDs) so a UI can link back to the sources.
+        """
+        candidates = self._select(question)
+        context = self._build_context(question, candidates)
+        answer = call_ollama(build_prompt(context, question),
+                             system=CHAT_SYSTEM_PROMPT, temperature=temperature)
+        sources = list(dict.fromkeys(c.paper_key for c in candidates))
+        return {"answer": answer, "sources": sources, "context": context}
+
 
 class GraphExpansionMixin:
     """Shared ``gather_studies`` orchestration for graph-backed retrievers.
@@ -294,16 +307,3 @@ class GraphExpansionMixin:
                   "Using raw chunks.")
             studies = [(c.paper_key, c.text) for c in candidates]
         return studies
-
-    def chat(self, question: str, temperature: float = 0.3) -> dict:
-        """Conversational answer plus the source paper pubids it retrieved.
-
-        Runs retrieval once and returns the cited papers (their PubMedQA pubids,
-        which are real PubMed IDs) so a UI can link back to the sources.
-        """
-        candidates = self._select(question)
-        context = self._build_context(question, candidates)
-        answer = call_ollama(build_prompt(context, question),
-                             system=CHAT_SYSTEM_PROMPT, temperature=temperature)
-        sources = list(dict.fromkeys(c.paper_key for c in candidates))
-        return {"answer": answer, "sources": sources, "context": context}
