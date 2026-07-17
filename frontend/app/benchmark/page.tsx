@@ -13,6 +13,14 @@ function fmtP(p: number) {
   return p < 0.0001 ? "<0.0001" : p.toFixed(4);
 }
 
+function fmtCI(ci: [number, number] | undefined) {
+  return ci ? `${ci[0].toFixed(1)}–${ci[1].toFixed(1)}%` : "n/a";
+}
+
+function fmtRecall(r: number | null | undefined) {
+  return r != null ? `${(r * 100).toFixed(1)}%` : "n/a";
+}
+
 export default function BenchmarkPage() {
   const summary = loadBenchmarkSummary();
   const winner = summary.arms.length
@@ -62,7 +70,9 @@ export default function BenchmarkPage() {
                 <tr className="border-b border-gray-200 text-left text-zinc-500">
                   <th className="px-4 py-2 font-medium">Arm</th>
                   <th className="px-4 py-2 font-medium">Accuracy</th>
+                  <th className="px-4 py-2 font-medium">95% CI</th>
                   <th className="px-4 py-2 font-medium">Macro F1</th>
+                  <th className="px-4 py-2 font-medium">Recall@k</th>
                   <th className="px-4 py-2 font-medium">Avg latency</th>
                   <th className="px-4 py-2 font-medium">Adds</th>
                 </tr>
@@ -82,9 +92,16 @@ export default function BenchmarkPage() {
                           winner
                         </span>
                       )}
+                      {!!arm.n_failed && (
+                        <span className="ml-2 text-[10px] text-amber-600" title="LLM calls that exhausted retries, recorded as a placeholder 'maybe'">
+                          {arm.n_failed} failed
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2 font-medium">{fmtPct(arm.accuracy)}</td>
+                    <td className="px-4 py-2 text-zinc-500 text-xs">{fmtCI(arm.accuracy_ci95)}</td>
                     <td className="px-4 py-2">{fmtPct(arm.macro_f1)}</td>
+                    <td className="px-4 py-2">{fmtRecall(arm.recall_at_k)}</td>
                     <td className="px-4 py-2">{arm.avg_latency.toFixed(1)}s</td>
                     <td className="px-4 py-2 text-zinc-600">{arm.adds}</td>
                   </tr>
@@ -106,6 +123,7 @@ export default function BenchmarkPage() {
                   <th className="px-4 py-2 font-medium">&Delta;acc</th>
                   <th className="px-4 py-2 font-medium">Gains / losses</th>
                   <th className="px-4 py-2 font-medium">p-value</th>
+                  <th className="px-4 py-2 font-medium">p (Holm)</th>
                   <th className="px-4 py-2 font-medium">Significant?</th>
                 </tr>
               </thead>
@@ -124,7 +142,10 @@ export default function BenchmarkPage() {
                     <td className="px-4 py-2 text-zinc-600">
                       {c.gains} / {c.losses}
                     </td>
-                    <td className="px-4 py-2 font-mono text-xs">{fmtP(c.p_value)}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{c.p_display ?? fmtP(c.p_value)}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-zinc-500">
+                      {c.p_holm_display ?? (c.p_holm != null ? fmtP(c.p_holm) : "n/a")}
+                    </td>
                     <td className="px-4 py-2">
                       {c.significant ? (
                         <span className="text-green-700 font-medium">yes</span>
