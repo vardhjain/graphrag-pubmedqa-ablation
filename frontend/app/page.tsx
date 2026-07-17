@@ -3,7 +3,7 @@ import ChatPanel from "@/components/ChatPanel";
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 bg-zinc-50">
+    <div className="flex flex-col h-screen bg-zinc-50">
       <header className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-zinc-900">

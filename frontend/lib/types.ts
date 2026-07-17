@@ -26,4 +26,5 @@ export interface ChatMessage {
   sources?: string[];
   reasoningPath?: ReasoningStep[];
   error?: boolean;
+  latencyMs?: number;
 }

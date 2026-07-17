@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { askQuestion, warmUpBackend, ApiError } from "@/lib/api";
 import type { ChatMessage } from "@/lib/types";
+import AnswerText from "./AnswerText";
 import ReasoningGraph from "./ReasoningGraph";
 
 const EXAMPLE_QUESTIONS = [
@@ -42,16 +43,31 @@ export default function ChatPanel() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [openReasoningFor, setOpenReasoningFor] = useState<number | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     warmUpBackend();
   }, []);
+
+  // Without this, the viewport stays pinned at its scroll position from
+  // before the request -- so the first long answer (and every one after it)
+  // lands below the fold and looks like nothing happened.
+  useEffect(() => {
+    // "smooth" silently no-ops in some browser contexts when the animation's
+    // rAF loop never gets a tick (backgrounded/unfocused tab) -- "auto" is an
+    // instant jump with no animation to get interrupted or skipped.
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [messages.length, loading]);
 
   async function send(question: string) {
     if (!question.trim() || loading) return;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
+    // send() only ever runs from an event handler (onClick/onSubmit below),
+    // never during render -- the lint rule can't see that from here.
+    // eslint-disable-next-line react-hooks/purity
+    const start = performance.now();
 
     try {
       const result = await askQuestion({ question });
@@ -62,6 +78,7 @@ export default function ChatPanel() {
           content: result.answer,
           sources: result.sources,
           reasoningPath: result.reasoning_path,
+          latencyMs: performance.now() - start,
         },
       ]);
     } catch (err) {
@@ -106,23 +123,33 @@ export default function ChatPanel() {
                     : "bg-gray-100 text-gray-900"
               }`}
             >
-              {m.content}
+              {m.role === "assistant" && !m.error ? <AnswerText text={m.content} /> : m.content}
 
-              {m.role === "assistant" && !m.error && m.sources && m.sources.length > 0 && (
+              {m.role === "assistant" && !m.error && ((m.sources && m.sources.length > 0) || m.latencyMs != null) && (
                 <div className="mt-3 pt-2 border-t border-gray-200 text-xs">
-                  <span className="font-medium">Sources: </span>
-                  {m.sources.map((pmid, si) => (
-                    <a
-                      key={pmid}
-                      href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}/`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-blue-600 hover:underline"
-                    >
-                      PMID {pmid}
-                      {si < m.sources!.length - 1 ? ", " : ""}
-                    </a>
-                  ))}
+                  {m.sources && m.sources.length > 0 && (
+                    <>
+                      <span className="font-medium">Sources: </span>
+                      {m.sources.map((pmid, si) => (
+                        <a
+                          key={pmid}
+                          href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}/`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          PMID {pmid}
+                          {si < m.sources!.length - 1 ? ", " : ""}
+                        </a>
+                      ))}
+                    </>
+                  )}
+                  {m.latencyMs != null && (
+                    <span className="text-gray-400">
+                      {m.sources && m.sources.length > 0 ? " · " : ""}
+                      answered in {(m.latencyMs / 1000).toFixed(1)}s
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -146,6 +173,7 @@ export default function ChatPanel() {
         ))}
 
         {loading && <LoadingBubble />}
+        <div ref={bottomRef} />
       </div>
 
       <form
