@@ -184,21 +184,32 @@ touched with a live ArangoDB instance available.
 
 ---
 
-## 10. Broad `except Exception` swallows failures silently — ROBUSTNESS (LOW)
+## 10. Broad `except Exception` swallows failures silently — PARTIALLY FIXED (benchmark path)
 
-**What:** Several `except Exception` blocks degrade silently via `print()` only —
-graph expansion failure, provider failures, DB connection failure. Real bugs
-(e.g. a malformed AQL, a typo in a bind var) look identical to an expected
+**What it was:** Several `except Exception` blocks degrade silently via `print()`
+only — graph expansion failure, provider failures, DB connection failure. Real
+bugs (e.g. a malformed AQL, a typo in a bind var) look identical to an expected
 "DB unreachable" degrade and are hidden behind raw-chunk fallback.
 
-**Where:** `src/kgqa/retrieval/graph.py:121`;
-`src/kgqa/retrieval/neo4j_graph.py:96`; `src/kgqa/service.py:84,106`;
-`src/kgqa/providers.py:105`.
+**Fixed on the benchmark path (2026-07-17):** `GraphExpansionMixin.gather_studies`
+(`src/kgqa/retrieval/base.py`) now increments a `self._degraded_count` on every
+fallback, and `scripts/run_benchmark.py` deltas that counter per question and
+prints a summary at the end of the run if any question degraded — a mass-degrade
+is no longer just a `print()` line to scroll past. This is the entry's own
+stated "at minimum" fix; the except itself stays broad on purpose (narrowing it
+risks missing a legitimate transient error the fallback exists to protect
+against).
 
-**Why it matters:** On the benchmark path especially, a silent degrade to raw
-chunks would quietly *lower accuracy* while the run still "succeeds" — the graph
-arm would produce plain-arm numbers with no loud signal. The `print` is easy to
-miss in a 200-question log.
+**Still open — `service.py:84,106` and `providers.py:105`:** these are
+hosted-agent-only instances of the same pattern (DB-connection degrade,
+provider-chain degrade), not reachable from the benchmark. Deliberately *not*
+touched: CLAUDE.md's own rule is "Error handling in the service degrades, never
+crashes ... Preserve this for anything on the hosted path," so narrowing or
+counting these would need a different mechanism (e.g. a metrics counter in a
+long-running FastAPI process, not a linear script's end-of-run summary) and
+risks that contract if done carelessly. `src/kgqa/retrieval/graph.py:121` /
+`neo4j_graph.py:96` no longer apply as locations — that logic moved to the
+shared mixin (GAPS #9).
 
 **Fix:** Narrow the catches where the failure mode is known (e.g. arango/neo4j
 connection exceptions) so unexpected errors propagate; or at minimum, in
