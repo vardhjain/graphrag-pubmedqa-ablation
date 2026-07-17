@@ -13,7 +13,7 @@
 [![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 [![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
-[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
+[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**MCP**](#use-it-as-an-agent-mcp) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
 
 Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
 
@@ -66,6 +66,21 @@ via [`scripts/ingest_neo4j.py`](scripts/ingest_neo4j.py) -- not the full
 documented tradeoff to keep the hosted demo on a genuinely free-forever tier;
 it doesn't affect the numbers in [RESULTS.md](RESULTS.md), which come from
 the untouched ArangoDB-based benchmark pipeline.
+
+### Use it as an agent (MCP)
+
+Point any MCP client at the hosted `/mcp` endpoint and it can use this agent
+as a tool -- no cloning, no API key. It exposes one tool,
+`ask_pubmed_graphrag(question, use_concepts=False)`.
+
+```bash
+claude mcp add --transport http graphrag-pubmedqa https://graphrag-agent-api.onrender.com/mcp
+```
+
+Claude Desktop / Cursor and other MCP clients work the same way over
+streamable HTTP -- see [`backend/README.md`](backend/README.md#use-it-as-an-agent-mcp)
+for their config format and the cold-start caveats (same free-tier sleep as
+the chat demo above).
 
 ---
 
