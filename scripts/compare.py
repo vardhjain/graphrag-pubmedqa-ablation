@@ -45,6 +45,18 @@ def load_results():
     return out
 
 
+def format_p(p: float) -> str:
+    """Human-readable p-value that can't misrepresent a real effect as zero.
+
+    McNemar p-values on a clear effect (e.g. the parent-expansion contrast)
+    are often ~1e-11 -- round(p, 4) collapses that to the literal string
+    "0.0000", which reads as a data error on a project whose whole pitch is
+    statistical rigor (the prose elsewhere correctly says "p < 0.0001", so
+    the generated artifacts contradicting it is the bug, not the number).
+    """
+    return "<0.0001" if p < 0.0001 else f"{p:.4f}"
+
+
 def aligned(a, b):
     """Align two arms' predictions on shared pubids (same seed -> same order)."""
     ids_a = a.get("ids") or list(range(len(a["y_pred"])))
@@ -103,24 +115,28 @@ def main():
         acc_b = sum(p == g for p, g in zip(pb, gt, strict=False)) / len(gt)
         d = (acc_b - acc_a) * 100
         sig = "yes" if test["significant_at_0.05"] else "no"
+        p_display = format_p(test["p_value"])
         print(f"  {a_name} -> {b_name}  ({desc})")
         print(f"      Δacc={d:+.2f}pp  gains={test['b_gains']}  losses={test['c_losses']}"
-              f"  p={test['p_value']:.4f}  sig={sig}")
+              f"  p={p_display}  sig={sig}")
         lines.append(f"| {a_name} → {b_name} ({desc}) | {d:+.2f} | {test['b_gains']} "
-                     f"| {test['c_losses']} | {test['p_value']:.4f} | {sig} |")
+                     f"| {test['c_losses']} | {p_display} | {sig} |")
         contrasts_json.append({"from": a_name, "to": b_name, "effect": desc,
                                "delta_acc": round(d, 2), "gains": test["b_gains"],
                                "losses": test["c_losses"],
-                               "p_value": round(test["p_value"], 4),
+                               # Full precision, not rounded to 4dp -- a real
+                               # p~1e-11 must not collapse to the literal 0.0.
+                               "p_value": test["p_value"],
+                               "p_display": p_display,
                                "significant": test["significant_at_0.05"]})
 
     md_path = os.path.join(RESULTS_DIR, "summary.md")
-    with open(md_path, "w") as f:
+    with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(f"\nWrote {md_path}")
 
     json_path = os.path.join(RESULTS_DIR, "summary.json")
-    with open(json_path, "w") as f:
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump({"n": max_n, "seed": RANDOM_SEED, "model": LLM_MODEL,
                    "dataset": "PubMedQA (pqa_labeled)" if "PubMedQA" in DATASET_NAME
                    else DATASET_NAME,

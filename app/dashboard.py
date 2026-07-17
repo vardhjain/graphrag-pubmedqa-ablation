@@ -116,8 +116,13 @@ def main():
         cdf = pd.DataFrame(summary["contrasts"])
         cdf["contrast"] = cdf["from"] + " → " + cdf["to"] + "  (" + cdf["effect"] + ")"
         cdf["significant"] = cdf["significant"].map({True: "yes", False: "no"})
+        # p_display (e.g. "<0.0001") avoids rendering a real, significant
+        # p-value (~1e-11 on the parent-expansion contrast) as the literal
+        # "0.000000" -- fall back to formatting p_value for older summary.json
+        # files generated before p_display existed.
+        cdf["p"] = cdf.get("p_display", cdf["p_value"].map(lambda p: f"{p:.4f}"))
         st.dataframe(
-            cdf[["contrast", "delta_acc", "gains", "losses", "p_value", "significant"]],
+            cdf[["contrast", "delta_acc", "gains", "losses", "p", "significant"]],
             use_container_width=True, hide_index=True,
         )
         st.caption("Latency by arm (seconds / query)")

@@ -43,4 +43,20 @@ expansion over a reranked RAG baseline, McNemar p<0.0001" — not "GraphRAG gets
 65% accuracy" and not "graph retrieval is 2x faster" (it is ~14% *slower*,
 7.5s vs 6.6s, and that's an honest, disclosed tradeoff for the accuracy gain).
 
+## Caveat: the hosted demo runs an unbenchmarked configuration
+
+The numbers above come from the untouched ArangoDB benchmark pipeline. The
+[live hosted demo](https://graphrag-pubmedqa-ablation.vercel.app) is a
+*different* deployment (`graph_id="demo"`, Neo4j-backed, scoped to the
+1,000-paper labeled split — see the README's Hosted agent section) that
+additionally runs **without the cross-encoder reranker**
+(`KGQA_SKIP_RERANKER=true`), a memory-saving concession for Render's free
+tier. That's `graph`'s parent-expansion mechanism on top of `plain`, not
+`plain_rr` — a configuration this table has never measured in isolation. The
+reranker's own effect (+7.0pp, not significant at n=200) suggests the hosted
+demo likely performs somewhere between `plain` and `graph`, but that's an
+inference, not a measurement. A fifth `graph_norr` arm would close this gap;
+until then, treat the hosted demo as a *qualitative* illustration of parent
+expansion, not a live instance of the `graph` row above.
+
 Full methodology and the 4-arm ablation diagram: [README.md](README.md#results).

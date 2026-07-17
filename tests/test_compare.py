@@ -4,7 +4,7 @@ number). No files touched -- aligned() is pure.
 
 from __future__ import annotations
 
-from scripts.compare import aligned
+from scripts.compare import aligned, format_p
 
 
 def test_aligned_pairs_by_id_when_ids_match():
@@ -51,3 +51,17 @@ def test_aligned_falls_back_to_positional_ids_when_missing():
     assert gt == ["yes", "no"]
     assert pa == ["yes", "no"]
     assert pb == ["no", "no"]
+
+
+def test_format_p_does_not_collapse_a_tiny_real_effect_to_zero():
+    """round(p, 4) turned real McNemar p-values (~1e-11 on the parent-
+    expansion contrast) into the literal string "0.0000" -- this is the
+    regression guard for that bug."""
+    assert format_p(5.4e-11) == "<0.0001"
+    assert format_p(0.00009999) == "<0.0001"
+
+
+def test_format_p_shows_four_decimals_above_the_threshold():
+    assert format_p(0.0814) == "0.0814"
+    assert format_p(0.6889) == "0.6889"
+    assert format_p(0.05) == "0.0500"
