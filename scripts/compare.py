@@ -20,18 +20,25 @@ from kgqa.config import DATASET_NAME, LLM_MODEL, RANDOM_SEED  # noqa: E402
 from kgqa.evaluation import mcnemar_test  # noqa: E402
 
 RESULTS_DIR = os.path.join(ROOT, "results")
-ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts"]
+# The first 4 are the primary cumulative ladder (each adds exactly one thing
+# over the last); graph_norr is a fifth, non-cumulative arm appended after --
+# it isolates parent-expansion *without* the reranker, i.e. the exact
+# configuration the hosted demo runs (render.yaml: KGQA_SKIP_RERANKER=true,
+# a 512MB-tier memory concession) that the main ladder never measures alone.
+ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts", "graph_norr"]
 ARM_ADDS = {
     "plain": "baseline chunk RAG",
     "plain_rr": "+ cross-encoder reranker",
     "graph": "+ parent-paper expansion",
     "graph_concepts": "+ MeSH concept hop",
+    "graph_norr": "+ parent-paper expansion, no reranker (hosted demo's config)",
 }
 # Adjacent-arm contrasts that isolate each component's contribution.
 CONTRASTS = [
     ("plain", "plain_rr", "reranker"),
     ("plain_rr", "graph", "parent expansion"),
     ("graph", "graph_concepts", "concept hop"),
+    ("plain", "graph_norr", "parent expansion without reranker"),
 ]
 
 
