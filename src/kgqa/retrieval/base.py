@@ -113,7 +113,17 @@ class ChunkStore:
     @classmethod
     def from_arango(cls, db, collection: str = "Chunks", batch: int = 5000,
                     cache_file: str | None = None) -> ChunkStore:
-        """Download chunk vectors from ArangoDB (with optional pickle cache)."""
+        """Download chunk vectors from ArangoDB (with optional pickle cache).
+
+        Uses a single query, paged server-side via ``batch_size`` and
+        iterated to exhaustion -- not N independent ``LIMIT offset, batch``
+        queries. Repeated unsorted queries have no ordering guarantee
+        relative to each other (ArangoDB doesn't promise stable order for an
+        unsorted scan), so paging that way could silently skip or duplicate
+        chunks across pages -- a corpus perturbation shared by every
+        retrieval arm. One query execution, streamed via its cursor, is a
+        single consistent snapshot and has no such gap.
+        """
         if cache_file:
             data = _load_vector_cache(cache_file)
             if data is not None and len(data["embeddings"]):
@@ -121,26 +131,18 @@ class ChunkStore:
                            data["texts"], np.asarray(data["embeddings"]))
 
         ids, paper_keys, texts, embeddings = [], [], [], []
-        offset = 0
-        while True:
-            aql = f"""
-                FOR c IN {collection}
-                    FILTER c.embedding != null
-                    LIMIT {offset}, {batch}
-                    RETURN {{ id: c._id, paper: c.paper_key,
-                              text: c.text, emb: c.embedding }}
-            """
-            page = list(db.aql.execute(aql, ttl=3600))
-            if not page:
-                break
-            for doc in page:
-                ids.append(doc["id"])
-                paper_keys.append(doc.get("paper") or doc["id"].split("/")[-1].rsplit("_", 1)[0])
-                texts.append(doc["text"])
-                embeddings.append(doc["emb"])
-            offset += len(page)
-            if len(page) < batch:
-                break
+        aql = """
+            FOR c IN @@collection
+                FILTER c.embedding != null
+                RETURN { id: c._id, paper: c.paper_key,
+                         text: c.text, emb: c.embedding }
+        """
+        cursor = db.aql.execute(aql, bind_vars={"@collection": collection}, batch_size=batch, ttl=3600)
+        for doc in cursor:
+            ids.append(doc["id"])
+            paper_keys.append(doc.get("paper") or doc["id"].split("/")[-1].rsplit("_", 1)[0])
+            texts.append(doc["text"])
+            embeddings.append(doc["emb"])
 
         embeddings_np = np.asarray(embeddings, dtype=np.float32)
         if cache_file and ids:
