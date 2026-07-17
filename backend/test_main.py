@@ -48,6 +48,22 @@ def test_query_rejects_empty_question():
     assert resp.status_code == 422
 
 
+def test_query_rejects_unknown_graph_id(monkeypatch):
+    """An unrecognized graph_id must 404 before ever reaching graphrag.answer --
+    otherwise it falls through to a full local re-encode of the corpus on an
+    unauthenticated endpoint (see the comment on _KNOWN_GRAPH_IDS)."""
+    import graphrag
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("answer() must not be called for an unknown graph_id")
+
+    monkeypatch.setattr(graphrag, "answer", fail_if_called)
+
+    resp = client.post("/query", json={"question": "does aspirin help?", "graph_id": "../../etc"})
+    assert resp.status_code == 404
+    assert "../../etc" in resp.json()["detail"]
+
+
 def test_query_failure_returns_502(monkeypatch):
     import graphrag
 

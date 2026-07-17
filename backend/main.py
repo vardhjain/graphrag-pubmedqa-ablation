@@ -78,6 +78,14 @@ app.add_middleware(
 
 # Dataset ids /ingest is allowed to resolve without a live upload pipeline.
 _KNOWN_DATASETS = {"demo": "demo"}
+# graph_ids /query is allowed to answer against -- the values of the mapping
+# above, i.e. only what /ingest can actually hand back. Without this, any
+# unrecognized graph_id reaches service._get_store() and falls through to
+# ChunkStore.from_dataset(): a full local re-encode of the corpus, cached
+# under a filename built directly from the caller-supplied string. On an
+# unauthenticated public endpoint that's both a cheap way to force repeated
+# expensive work and a path-traversal-shaped footgun, not just wasted CPU.
+_KNOWN_GRAPH_IDS = set(_KNOWN_DATASETS.values())
 
 
 class QueryRequest(BaseModel):
@@ -108,6 +116,12 @@ def health() -> dict:
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest) -> dict:
     from graphrag import answer
+
+    if req.graph_id not in _KNOWN_GRAPH_IDS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Unknown graph_id {req.graph_id!r}. Known graphs: {sorted(_KNOWN_GRAPH_IDS)}.",
+        )
 
     try:
         return answer(req.question, graph_id=req.graph_id, use_concepts=req.use_concepts)
