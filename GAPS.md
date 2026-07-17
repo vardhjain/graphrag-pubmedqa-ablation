@@ -104,6 +104,30 @@ frontend RESULTS.md links (`frontend/app/page.tsx`,
 the canonical slug. Since the frontend is now deployed, these were live links
 on the production `/benchmark` and home pages, not just repo metadata.
 
+**Round 2 (2026-07-16) — this entry's first "FIXED" was over-scoped.** A
+repo-wide sweep found four more instances the original pass never touched,
+including the worst one:
+
+- **`notebooks/01_ingest.ipynb` + `notebooks/02_benchmark.ipynb`** — both
+  cloned the old slug. This was the serious one: the old repo *still exists
+  and still clones*, 25 commits behind, so the documented reproduction path
+  silently benchmarked stale code instead of failing loudly. Note the three
+  lines (`rm -rf`, `git clone`, `%cd`) are coupled — the `%cd` was *correct*
+  for the old clone, so fixing either line alone would have broken a working
+  cell.
+- **`CITATION.cff:9`** — `repository-code`, the field GitHub's "Cite this
+  repository" widget and Zenodo read, so the dead slug propagated into every
+  exported citation.
+- **`CONTRIBUTING.md:11`** — cloned the *canonical* repo then `cd`-ed to the
+  *old* directory name, so the contributor setup block failed on its first
+  step.
+
+All fixed and verified: no non-binary file outside historical records
+(`KGQA_session_export.md`, `docs/Project_Report.pdf`) still references the old
+slug. The lesson worth keeping: "I fixed the slug" is not verifiable by
+spot-check — `git remote -v` and `pyproject.toml` being clean says nothing
+about notebooks, citation metadata, or shell snippets in docs.
+
 ---
 
 ## 7. ~~`frontend/.env.local` points at the wrong backend port~~ — RESOLVED (stale entry)

@@ -8,7 +8,7 @@ rigor, reproducibility, or clarity are especially welcome.
 
 ```bash
 git clone https://github.com/vardhjain/graphrag-pubmedqa-ablation.git
-cd Knowledge_Graph_Question_Answering
+cd graphrag-pubmedqa-ablation
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 make install-dev          # or: pip install -r requirements-dev.txt
 pre-commit install        # optional: run ruff automatically on commit

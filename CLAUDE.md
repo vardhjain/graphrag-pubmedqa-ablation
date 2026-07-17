@@ -127,10 +127,13 @@ blueprint), frontend → Vercel, dashboard → Streamlit Community Cloud. See
   directly and never reads that gate. Same `all-MiniLM-L6-v2` weights and 384-dim
   space either way, so vectors stay interchangeable — `scripts/verify_onnx_parity.py`
   is the gate that proves it. Don't "unify" these either.
-- **Repo slug is inconsistent** (`graphrag-pubmedqa-ablation` vs
-  `Knowledge_Graph_Question_Answering`) — see GAPS #6 before adding new links.
-- **`frontend/.env.local` currently points at `:8123`** (wrong); backend is
-  `:8000` — see GAPS #7.
+- **The old repo still exists and still clones** — `vardhjain/Knowledge_Graph_Question_Answering`
+  is live but frozen ~25 commits back; it does *not* redirect to the canonical
+  `vardhjain/graphrag-pubmedqa-ablation`. So a stale clone URL fails **silently**
+  (you get old code that runs fine) rather than 404-ing. This already bit both
+  Colab notebooks — see GAPS #6. Never copy a clone URL from memory; check
+  `git remote -v`. The local dir is `graphrag-pubmedqa-ablation`, so any
+  `clone`/`cd`/`rm -rf` trio must agree on that name.
 
 ---
 
