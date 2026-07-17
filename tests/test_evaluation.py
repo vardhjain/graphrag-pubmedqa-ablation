@@ -32,6 +32,20 @@ def test_evaluator_metrics_and_normalisation():
     assert s["ids"] == ["1", "2", "3"]
 
 
+def test_evaluator_tracks_failed_calls_separately_from_predictions():
+    """A failed LLM call is still counted toward accuracy (it really did
+    fail end-to-end -- silently dropping it would compare arms on different
+    sub-samples), but must be flagged so paired significance tests
+    (scripts/compare.py's aligned()) can exclude it."""
+    ev = Evaluator("plain")
+    ev.record("yes", "yes", 1.0, sample_id="1")  # genuine success
+    ev.record("no", "maybe", 2.0, sample_id="2", failed=True)  # exhausted retries
+    s = ev.summary()
+    assert s["failed"] == [False, True]
+    assert s["n_failed"] == 1
+    assert s["samples"] == 2  # failures still counted in samples/accuracy
+
+
 def test_mcnemar_detects_one_sided_gain():
     gt = ["yes"] * 10
     a = ["no"] * 10           # arm A always wrong

@@ -58,14 +58,25 @@ def format_p(p: float) -> str:
 
 
 def aligned(a, b):
-    """Align two arms' predictions on shared pubids (same seed -> same order)."""
+    """Align two arms' predictions on shared pubids (same seed -> same order),
+    excluding any id where either arm's LLM call failed (recorded as a
+    placeholder "maybe", not a genuine model judgment -- see
+    Evaluator.record's failed param). Attributing an infra timeout to "the
+    retrieval strategy" would contaminate the one contrast this project's
+    ablation exists to get right. Old-format result JSONs with no "failed"
+    field are treated as zero failures.
+    """
     ids_a = a.get("ids") or list(range(len(a["y_pred"])))
     ids_b = b.get("ids") or list(range(len(b["y_pred"])))
+    failed_a = a.get("failed") or [False] * len(ids_a)
+    failed_b = b.get("failed") or [False] * len(ids_b)
     idx_b = {sid: i for i, sid in enumerate(ids_b)}
     gt, pa, pb = [], [], []
     for i, sid in enumerate(ids_a):
+        if failed_a[i]:
+            continue
         j = idx_b.get(sid)
-        if j is None:
+        if j is None or failed_b[j]:
             continue
         gt.append(a["y_true"][i])
         pa.append(a["y_pred"][i])
@@ -91,11 +102,13 @@ def main():
         r = results[arm]
         acc, f1 = r["accuracy"] * 100, r.get("macro_f1", 0) * 100
         lat, n = r["avg_latency"], r["samples"]
+        n_failed = r.get("n_failed", 0)
         max_n = max(max_n, n)
-        print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  lat={lat:5.1f}s  n={n}")
+        failed_note = f"  failed={n_failed}" if n_failed else ""
+        print(f"  {arm:<16} acc={acc:6.2f}%  f1={f1:6.2f}%  lat={lat:5.1f}s  n={n}{failed_note}")
         lines.append(f"| {arm} | {acc:.2f}% | {f1:.2f}% | {lat:.1f} | {n} |")
         arms_json.append({"arm": arm, "accuracy": round(acc, 2), "macro_f1": round(f1, 2),
-                          "avg_latency": round(lat, 1), "samples": n,
+                          "avg_latency": round(lat, 1), "samples": n, "n_failed": n_failed,
                           "adds": ARM_ADDS.get(arm, "")})
 
     print("\n" + "=" * 64)

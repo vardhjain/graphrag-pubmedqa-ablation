@@ -40,9 +40,18 @@ class Evaluator:
     y_pred: list = field(default_factory=list)
     latencies: list = field(default_factory=list)
     ids: list = field(default_factory=list)
+    # True where the LLM call exhausted MAX_TRIES and pred is a placeholder
+    # "maybe", not a genuine model judgment -- kept in accuracy/macro_f1 (the
+    # sample really did fail end-to-end, and silently dropping it would make
+    # arms comparable on different sub-samples), but scripts/compare.py's
+    # paired McNemar test excludes any id where either arm failed, since
+    # attributing a timeout to "the retrieval strategy" would contaminate
+    # the one number this project's whole ablation exists to get right.
+    failed: list = field(default_factory=list)
 
     def record(self, ground_truth: str, prediction: str,
-               latency: float = 0.0, sample_id: str | None = None) -> None:
+               latency: float = 0.0, sample_id: str | None = None,
+               failed: bool = False) -> None:
         pred = prediction.lower().strip()
         if pred not in LABELS:
             pred = "maybe"
@@ -50,6 +59,10 @@ class Evaluator:
         self.y_pred.append(pred)
         self.latencies.append(latency)
         self.ids.append(sample_id)
+        self.failed.append(failed)
+
+    def n_failed(self) -> int:
+        return sum(self.failed)
 
     # ── metrics ───────────────────────────────────────────────────────────────
     def accuracy(self) -> float:
@@ -70,11 +83,13 @@ class Evaluator:
             "accuracy": self.accuracy(),
             "macro_f1": self.macro_f1(),
             "samples": len(self.y_true),
+            "n_failed": self.n_failed(),
             "total_time": sum(self.latencies),
             "avg_latency": self.avg_latency(),
             "y_true": self.y_true,
             "y_pred": self.y_pred,
             "ids": self.ids,
+            "failed": self.failed,
         }
 
     def report(self) -> dict:
@@ -85,6 +100,9 @@ class Evaluator:
         print(f"  {self.model_name} — Evaluation Report")
         print(f"{'=' * 52}")
         print(f"  Samples   : {len(self.y_true)}")
+        if self.n_failed():
+            print(f"  Failed    : {self.n_failed()} (recorded as 'maybe'; "
+                  "excluded from paired significance tests, see compare.py)")
         print(f"  Accuracy  : {self.accuracy():.2%}")
         print(f"  Macro F1  : {self.macro_f1():.2%}")
         print(f"  Avg/query : {self.avg_latency():.1f}s")
