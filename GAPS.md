@@ -201,22 +201,30 @@ the end of the run so a mass-degrade is visible.
 
 ---
 
-## 11. AQL built with f-string interpolation — FRAGILE PATTERN (LOW / informational)
+## 11. ~~AQL built with f-string interpolation~~ — FIXED (collection name);~~ingest.py~~ claim was stale
 
-**What:** `ChunkStore.from_arango` builds AQL by interpolating `{collection}`,
-`{offset}`, `{batch}` into the query string; `ingest.py` similar. None of these
-are user-controlled (all internal constants/ints), so this is **not** an injection
-vulnerability today.
+**What it was:** `ChunkStore.from_arango` built AQL by interpolating
+`{collection}`, `{offset}`, `{batch}` into the query string. None of these were
+user-controlled (all internal constants/ints), so this was never an injection
+vulnerability -- the risk was purely that the pattern reads as "we interpolate
+into AQL here," which invites copying into a future call site that isn't so
+lucky.
 
-**Where:** `src/kgqa/retrieval/base.py:100-106`.
+**Fixed as a byproduct of GAPS-adjacent work (2026-07-17):** the pagination
+rewrite below replaced the whole `LIMIT {offset}, {batch}` loop with a single
+query, which eliminates `{offset}`/`{batch}` from the string entirely; the
+remaining `{collection}` interpolation now uses ArangoDB's `@@collection` bind
+syntax (`bind_vars={"@collection": collection}`) instead of an f-string. See
+`src/kgqa/retrieval/base.py:113-149` and `tests/test_retrieval.py`'s
+`test_from_arango_issues_a_single_query_not_offset_pagination`, which asserts
+the bind var is actually used.
 
-**Why it matters:** The pattern is a landmine if a future change ever routes
-user/dataset input into one of these fields (e.g. a per-dataset collection name
-from `/ingest`). It reads as "we interpolate into AQL here" which invites copying.
-
-**Fix:** Use ArangoDB bind parameters for the values (`@offset`, `@batch`) and, if
-collection names ever become dynamic, validate them against a known allowlist
-rather than interpolating. Low priority while inputs stay internal.
+**Correction:** this entry's original "`ingest.py` similar" claim was
+inaccurate -- `scripts/ingest.py` writes via `db.collection(name).import_bulk(...)`
+(the python-arango collection API), not raw AQL, so there was never a second
+instance of this pattern there. Worth remembering: a GAPS entry describing
+"similar" code elsewhere is a claim, not a fact, until re-checked -- this one
+apparently never was.
 
 ---
 

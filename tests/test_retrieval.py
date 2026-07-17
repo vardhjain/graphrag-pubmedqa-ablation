@@ -176,3 +176,63 @@ def test_vector_cache_write_is_atomic(tmp_path, monkeypatch):
         pass
 
     assert not cache.exists()  # partial bytes stayed in the .tmp file, never renamed
+
+
+class _BulkArangoAQL:
+    """AQL fake for ChunkStore.from_arango's bulk vector download.
+
+    Records every execute() call so tests can assert exactly one query is
+    issued -- the pagination bug this replaces issued N independent LIMIT
+    offset,batch queries with no ordering guarantee relative to each other.
+    """
+
+    def __init__(self, rows):
+        self._rows = rows
+        self.execute_calls: list[dict] = []
+
+    def execute(self, query, bind_vars=None, **kwargs):
+        self.execute_calls.append({"query": query, "bind_vars": bind_vars, **kwargs})
+        return iter(self._rows)
+
+
+class _BulkArangoDB:
+    def __init__(self, rows):
+        self.aql = _BulkArangoAQL(rows)
+
+
+def _bulk_arango_rows():
+    return [
+        {"id": "Chunks/1_0", "paper": "1", "text": "aspirin trial", "emb": [1.0, 0.0]},
+        {"id": "Chunks/2_0", "paper": "2", "text": "statin trial", "emb": [0.0, 1.0]},
+    ]
+
+
+def test_from_arango_issues_a_single_query_not_offset_pagination():
+    """Regression guard: from_arango must stream one query's cursor to
+    exhaustion, not repeat independent LIMIT offset,batch queries (which have
+    no ordering guarantee relative to each other and could silently skip or
+    duplicate chunks across pages -- a corpus perturbation shared by every
+    retrieval arm). Also confirms the collection name is bound, not
+    f-string-interpolated (GAPS #11)."""
+    db = _BulkArangoDB(_bulk_arango_rows())
+
+    store = ChunkStore.from_arango(db)
+
+    assert store.ids == ["Chunks/1_0", "Chunks/2_0"]
+    assert store.paper_keys == ["1", "2"]
+    assert store.texts == ["aspirin trial", "statin trial"]
+    assert len(db.aql.execute_calls) == 1
+    assert db.aql.execute_calls[0]["bind_vars"] == {"@collection": "Chunks"}
+
+
+def test_from_arango_cache_hit_skips_the_query_entirely(tmp_path):
+    """A populated cache must short-circuit before ever calling db.aql --
+    the whole point of caching the bulk download."""
+    cache = tmp_path / "vectors.pkl"
+    ChunkStore.from_arango(_BulkArangoDB(_bulk_arango_rows()), cache_file=str(cache))
+
+    db = _BulkArangoDB(_bulk_arango_rows())
+    store = ChunkStore.from_arango(db, cache_file=str(cache))
+
+    assert store.ids == ["Chunks/1_0", "Chunks/2_0"]
+    assert db.aql.execute_calls == []
