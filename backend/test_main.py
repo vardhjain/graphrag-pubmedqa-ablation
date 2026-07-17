@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
@@ -20,7 +21,72 @@ client = TestClient(app)
 def test_health():
     resp = client.get("/health")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert isinstance(body["demo_graph_loaded"], bool)
+
+
+def test_health_reports_demo_graph_loaded_state(monkeypatch):
+    """demo_graph_loaded reads the existing cache and must never trigger a
+    load itself -- it's a readiness signal, not a warm-up trigger."""
+    import kgqa.service as service
+
+    monkeypatch.setitem(service._STORE_CACHE, "demo", object())
+    assert client.get("/health").json()["demo_graph_loaded"] is True
+
+    monkeypatch.delitem(service._STORE_CACHE, "demo", raising=False)
+    assert client.get("/health").json()["demo_graph_loaded"] is False
+
+
+def test_warm_up_in_background_is_off_by_default(monkeypatch):
+    """Importing/running the app must never trigger a real model/DB load
+    just because a test module happened to import it -- opt-in only."""
+    import backend.main as main
+
+    monkeypatch.delenv("KGQA_WARM_ON_STARTUP", raising=False)
+    calls = []
+    monkeypatch.setattr(threading, "Thread", lambda *a, **k: calls.append((a, k)))
+
+    main._maybe_warm_up_in_background()
+
+    assert calls == []
+
+
+def test_warm_up_in_background_starts_a_thread_when_opted_in(monkeypatch):
+    import backend.main as main
+
+    monkeypatch.setenv("KGQA_WARM_ON_STARTUP", "true")
+    started = {}
+
+    class FakeThread:
+        def __init__(self, target=None, daemon=None):
+            started["target"] = target
+            started["daemon"] = daemon
+
+        def start(self):
+            started["started"] = True
+
+    monkeypatch.setattr(threading, "Thread", FakeThread)
+
+    main._maybe_warm_up_in_background()
+
+    assert started["target"] is main._warm_up_demo_graph
+    assert started["daemon"] is True
+    assert started["started"] is True
+
+
+def test_warm_up_demo_graph_swallows_failures(monkeypatch):
+    """A failed warm-up (e.g. Neo4j unreachable at boot) must not propagate --
+    the same work just happens lazily on the first real /query instead."""
+    import backend.main as main
+    import kgqa.service as service
+
+    def broken(graph_id, use_concepts=False):
+        raise RuntimeError("Neo4j unavailable")
+
+    monkeypatch.setattr(service, "_get_retriever", broken)
+
+    main._warm_up_demo_graph()  # must not raise
 
 
 def test_query_returns_answer_shape(monkeypatch):

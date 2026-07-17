@@ -96,6 +96,18 @@ services:
       # inactivity) fails fast instead of taking the whole instance down.
       - key: KGQA_DISABLE_DATASET_FALLBACK
         value: "true"
+      # /health is a static dict and touches nothing on the answer path, so
+      # the keep-warm cron pinging it (.github/workflows/keep-warm.yml) only
+      # ever kept the *process* alive -- after any restart (new deploy, or
+      # the free tier spinning down and waking back up), the first real
+      # /query still paid the full encoder+Neo4j load cost inline. This
+      # loads the demo graph proactively at startup instead, in a background
+      # thread so it never blocks /health or delays Render's own deploy
+      # health check. NOTE: like CORS_ORIGINS below, mirror into the
+      # dashboard's Environment tab by hand -- render.yaml envVars don't
+      # auto-sync to an existing service.
+      - key: KGQA_WARM_ON_STARTUP
+        value: "true"
       # Limits BLAS/OMP thread pools so torch/numpy don't each spin up one
       # thread per core, which multiplies memory on shared/limited hosts.
       - key: OMP_NUM_THREADS
