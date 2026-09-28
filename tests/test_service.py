@@ -182,3 +182,209 @@ def test_get_store_still_falls_back_by_default(monkeypatch, fake_encoder):
 
     assert store is not None
     assert service._STORE_CACHE["demo"] is store
+
+
+def test_failed_neo4j_connect_is_retried_after_the_window(monkeypatch):
+    """A failed connect must not be cached forever: within the window it's
+    served from cache, after it the connect is attempted again."""
+    import kgqa.models as models
+    import kgqa.service as service
+
+    calls = []
+    sentinel = object()
+
+    def flaky(cfg, max_retries=1):
+        calls.append(1)
+        if len(calls) == 1:
+            raise ConnectionError("paused")
+        return sentinel
+
+    clock = [1000.0]
+    monkeypatch.setattr(models, "connect_neo4j", flaky)
+    monkeypatch.setattr(service.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(service, "_NEO4J_DRIVER_CACHE", {})
+    monkeypatch.setattr(service, "_NEO4J_FAILED_AT", {})
+
+    assert service._shared_neo4j_driver() is None
+    clock[0] += 10
+    assert service._shared_neo4j_driver() is None
+    assert len(calls) == 1  # still inside the retry window
+    clock[0] += service._CONNECT_RETRY_SECONDS
+    assert service._shared_neo4j_driver() is sentinel
+    assert len(calls) == 2
+    assert service._shared_neo4j_driver() is sentinel  # success is cached for good
+    assert len(calls) == 2
+
+
+def test_failed_arango_connect_is_retried_after_the_window(monkeypatch):
+    import kgqa.models as models
+    import kgqa.service as service
+
+    calls = []
+
+    def flaky(cfg, max_retries=1):
+        calls.append(1)
+        raise ConnectionError("down")
+
+    clock = [1000.0]
+    monkeypatch.setattr(models, "connect_arango", flaky)
+    monkeypatch.setattr(service.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(service, "_ARANGO_DB_CACHE", {})
+    monkeypatch.setattr(service, "_ARANGO_FAILED_AT", {})
+
+    assert service._shared_db("ds") is None
+    assert service._shared_db("ds") is None
+    assert len(calls) == 1
+    clock[0] += service._CONNECT_RETRY_SECONDS + 1
+    assert service._shared_db("ds") is None
+    assert len(calls) == 2
+
+
+def test_reasoning_path_omits_graph_edges_when_expansion_degraded(
+        fake_encoder, fake_reranker, monkeypatch):
+    import kgqa.service as service
+
+    class BrokenDriver:
+        def session(self):
+            raise RuntimeError("no connection")
+
+    texts = ["aspirin reduces heart attack risk in patients"]
+    store = ChunkStore(["Chunks/1_0"], ["1"], texts,
+                       np.asarray(fake_encoder.encode(texts, normalize_embeddings=True)))
+    retriever = Neo4jGraphRetriever(store, fake_encoder, BrokenDriver(),
+                                    reranker=fake_reranker, top_k_final=1)
+    monkeypatch.setattr(service, "_get_retriever", lambda graph_id, use_concepts=False: retriever)
+    monkeypatch.setattr(service, "call_llm", lambda task, prompt, system="": "ok")
+
+    result = service.answer("aspirin", graph_id="demo")
+
+    kinds = [step["kind"] for step in result["reasoning_path"]]
+    assert kinds == ["seed_chunk"]
+
+
+def test_reasoning_path_dedupes_steps():
+    import kgqa.service as service
+    from kgqa.retrieval.base import Candidate
+
+    cands = [Candidate("Chunks/1_0", "1", "a"), Candidate("Chunks/1_1", "1", "b")]
+    studies = [("1", "abs"), ("1", "abs"), ("9", "n"), ("9", "n")]
+
+    path = service._build_reasoning_path(cands, studies)
+
+    parents = [(s["node_id"], s["from_node"]) for s in path if s["kind"] == "parent_paper"]
+    assert parents == [("Papers/1", "Chunks/1_0"), ("Papers/1", "Chunks/1_1")]
+    assert sum(s["kind"] == "concept_neighbour" for s in path) == 1
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("<think>hmm</think> Yes, it does.", "Yes, it does."),
+    ("<think>a</think>Yes.<think>b</think> Really.", "Yes. Really."),
+    ("Yes.\n<think>trailing unterminated reasoning", "Yes."),
+    ("stray reasoning</think> No.", "No."),
+    ("Plain answer.", "Plain answer."),
+])
+def test_strip_think(raw, expected):
+    import kgqa.service as service
+
+    assert service.strip_think(raw) == expected
+
+
+def test_strip_think_all_reasoning_returns_cut_off_notice():
+    import kgqa.service as service
+
+    out = service.strip_think("<think>never finished")
+    assert "cut off" in out
+
+
+def test_answer_strips_think_on_hosted_path(fake_encoder, fake_reranker, monkeypatch):
+    import kgqa.service as service
+
+    retriever = make_retriever(fake_encoder, fake_reranker)
+    monkeypatch.setattr(service, "_get_retriever", lambda graph_id, use_concepts=False: retriever)
+    monkeypatch.setattr(service, "call_llm",
+                        lambda task, prompt, system="": "<think>x</think> Yes.")
+
+    assert service.answer("aspirin", graph_id="demo")["answer"] == "Yes."
+
+
+# ── models.connect_* retry behavior (the service's connect path) ─────────────
+class _Cfg:
+    host = uri = "http://x"
+    user = "u"
+    password = "p"
+    db_name = "d"
+
+    def require_password(self):
+        return self.password
+
+
+def test_connect_arango_no_sleep_after_last_attempt_and_catches_builtin(monkeypatch):
+    arango = pytest.importorskip("arango")
+    import kgqa.models as models
+
+    sleeps = []
+    monkeypatch.setattr("time.sleep", lambda s: sleeps.append(s))
+
+    class Client:
+        def __init__(self, hosts):
+            pass
+
+        def db(self, *a, **k):
+            raise ConnectionAbortedError("aborted")
+
+    monkeypatch.setattr(arango, "ArangoClient", Client)
+
+    with pytest.raises(ConnectionError, match="Could not connect"):
+        models.connect_arango(_Cfg(), max_retries=2)
+    assert sleeps == [5]  # slept between attempts only, not after the last
+
+
+def test_connect_arango_does_not_retry_auth_errors(monkeypatch):
+    arango = pytest.importorskip("arango")
+    from arango.exceptions import ServerConnectionError
+
+    import kgqa.models as models
+
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    calls = []
+
+    class Client:
+        def __init__(self, hosts):
+            pass
+
+        def db(self, *a, **k):
+            calls.append(1)
+            exc = ServerConnectionError.__new__(ServerConnectionError)
+            Exception.__init__(exc, "unauthorized")
+            exc.http_code = 401
+            raise exc
+
+    monkeypatch.setattr(arango, "ArangoClient", Client)
+
+    with pytest.raises(ServerConnectionError):
+        models.connect_arango(_Cfg(), max_retries=5)
+    assert len(calls) == 1
+
+
+def test_connect_neo4j_closes_failed_driver_and_skips_final_sleep(monkeypatch):
+    neo4j = pytest.importorskip("neo4j")
+    from neo4j.exceptions import ServiceUnavailable
+
+    import kgqa.models as models
+
+    sleeps, closed = [], []
+    monkeypatch.setattr("time.sleep", lambda s: sleeps.append(s))
+
+    class Driver:
+        def verify_connectivity(self):
+            raise ServiceUnavailable("paused")
+
+        def close(self):
+            closed.append(1)
+
+    monkeypatch.setattr(neo4j.GraphDatabase, "driver", lambda *a, **k: Driver())
+
+    with pytest.raises(ConnectionError):
+        models.connect_neo4j(_Cfg(), max_retries=2)
+    assert len(closed) == 2
+    assert sleeps == [5]

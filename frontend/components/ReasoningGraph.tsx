@@ -1,14 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import ReactFlow, {
-  Background,
-  Controls,
-  type Edge,
-  type Node,
-  Position,
-} from "reactflow";
-import "reactflow/dist/style.css";
+import { Background, Controls, type Edge, type Node, Position, ReactFlow } from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import type { ReasoningStep } from "@/lib/types";
 
 const KIND_STYLE: Record<ReasoningStep["kind"], { bg: string; border: string }> = {
@@ -23,14 +17,31 @@ const KIND_LABEL: Record<ReasoningStep["kind"], string> = {
   concept_neighbour: "Concept neighbour (MENTIONS)",
 };
 
-function buildGraph(steps: ReasoningStep[]): { nodes: Node[]; edges: Edge[] } {
-  const seedChunks = steps.filter((s) => s.kind === "seed_chunk");
-  const parentPapers = steps.filter((s) => s.kind === "parent_paper");
-  const conceptNeighbours = steps.filter((s) => s.kind === "concept_neighbour");
+type LabelNode = Node<{ label: string }>;
 
-  const nodes: Node[] = [];
+function uniqueByNodeId(steps: ReasoningStep[]): ReasoningStep[] {
+  const seen = new Set<string>();
+  return steps.filter((s) => (seen.has(s.node_id) ? false : (seen.add(s.node_id), true)));
+}
+
+function buildGraph(steps: ReasoningStep[]): { nodes: LabelNode[]; edges: Edge[] } {
+  const seedChunks = steps.filter((s) => s.kind === "seed_chunk");
+  // Two top chunks from the same paper yield two parent_paper steps with the
+  // same node_id. Dedupe before layout (else the column has a gap) -- the
+  // distinct chunk->paper edges are still collected from every step below.
+  const allParentSteps = steps.filter((s) => s.kind === "parent_paper");
+  const parentPapers = uniqueByNodeId(allParentSteps);
+  const conceptNeighbours = uniqueByNodeId(steps.filter((s) => s.kind === "concept_neighbour"));
+
+  const nodes: LabelNode[] = [];
   const edges: Edge[] = [];
   const seen = new Set<string>();
+  const edgeIds = new Set<string>();
+  const pushEdge = (edge: Edge) => {
+    if (edgeIds.has(edge.id)) return;
+    edgeIds.add(edge.id);
+    edges.push(edge);
+  };
 
   const addNode = (step: ReasoningStep, x: number, y: number) => {
     if (seen.has(step.node_id)) return;
@@ -42,13 +53,13 @@ function buildGraph(steps: ReasoningStep[]): { nodes: Node[]; edges: Edge[] } {
       data: { label: step.label },
       sourcePosition: Position.Bottom,
       targetPosition: Position.Top,
+      width: 180,
       style: {
         background: style.bg,
         border: `1.5px solid ${style.border}`,
         borderRadius: 8,
         padding: 8,
         fontSize: 12,
-        width: 180,
       },
     });
   };
@@ -57,9 +68,9 @@ function buildGraph(steps: ReasoningStep[]): { nodes: Node[]; edges: Edge[] } {
   parentPapers.forEach((s, i) => addNode(s, i * 220, 160));
   conceptNeighbours.forEach((s, i) => addNode(s, i * 220 + 60, 320));
 
-  for (const step of parentPapers) {
+  for (const step of allParentSteps) {
     if (step.from_node) {
-      edges.push({
+      pushEdge({
         id: `${step.from_node}->${step.node_id}`,
         source: step.from_node,
         target: step.node_id,
@@ -75,7 +86,7 @@ function buildGraph(steps: ReasoningStep[]): { nodes: Node[]; edges: Edge[] } {
   // paper so the fan-out is visible without overclaiming a single source.
   for (const neighbour of conceptNeighbours) {
     for (const parent of parentPapers) {
-      edges.push({
+      pushEdge({
         id: `${parent.node_id}->${neighbour.node_id}`,
         source: parent.node_id,
         target: neighbour.node_id,
@@ -93,7 +104,7 @@ export default function ReasoningGraph({ steps }: { steps: ReasoningStep[] }) {
 
   if (steps.length === 0) {
     return (
-      <p className="text-sm text-gray-500 italic p-4">
+      <p className="text-sm text-gray-600 italic p-4">
         No reasoning path to show for this answer.
       </p>
     );
@@ -102,12 +113,19 @@ export default function ReasoningGraph({ steps }: { steps: ReasoningStep[] }) {
   return (
     <div className="w-full">
       <div className="h-72 w-full rounded-lg border border-gray-200">
-        <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          fitView
+          nodesDraggable={false}
+          nodesConnectable={false}
+          proOptions={{ hideAttribution: true }}
+        >
           <Background />
           <Controls showInteractive={false} />
         </ReactFlow>
       </div>
-      <div className="flex gap-4 mt-2 text-xs text-gray-600">
+      <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-600">
         {(Object.keys(KIND_STYLE) as ReasoningStep["kind"][]).map((kind) => (
           <span key={kind} className="flex items-center gap-1">
             <span

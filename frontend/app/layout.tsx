@@ -12,9 +12,22 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_NAME = "PubMed GraphRAG assistant";
+const DESCRIPTION =
+  "Ask biomedical questions answered from PubMed abstracts via graph-augmented retrieval, with a reasoning-path visualization and a fair 4-arm GraphRAG ablation behind it.";
+
 export const metadata: Metadata = {
-  title: "PubMed GraphRAG assistant",
-  description: "Graph-augmented retrieval over PubMedQA, with a reasoning-path visualization",
+  metadataBase: new URL("https://graphrag-pubmedqa-ablation.vercel.app"),
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  description: DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: { card: "summary", title: SITE_NAME, description: DESCRIPTION },
 };
 
 export default function RootLayout({

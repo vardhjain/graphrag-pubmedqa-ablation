@@ -55,10 +55,10 @@ unfair" table in [README.md](README.md) and the audit in
 | **Benchmark graph DB** | **ArangoDB** (multi-model, AQL) | Papers/Chunks/Concepts nodes + HAS_CONTEXT/MENTIONS edges. All RESULTS.md numbers come from here. Runs local (Docker) or ArangoDB Oasis. |
 | **Hosted-demo graph DB** | **Neo4j AuraDB Free** | A *second, parallel* graph backend used **only** by the live hosted agent's `graph_id="demo"` path, scoped to the 1,000-paper labeled split so it fits a genuinely-free-forever tier. The benchmark pipeline never touches it. |
 | **Benchmark LLM** | `deepseek-r1:8b` via **Ollama** (local) | Reasoning model, deterministic (`temperature=0`), GPU-friendly on Colab. Emits `<think>…</think>` which the answer extractor strips. |
-| **Hosted-demo LLM** | **Groq / Gemini Flash**, falling back to Ollama | Free cloud inference so the hosted agent needs no GPU. A provider *chain* (see `providers.py`) survives a single provider's outage or model deprecation. |
+| **Hosted-demo LLM** | **Gemini Flash**, falling back to Ollama | Free cloud inference so the hosted agent needs no GPU. A provider *chain* (see `providers.py`) survives a single provider's outage or model deprecation. |
 | **Backend** | **FastAPI** + Uvicorn | Thin JSON API (`/query`, `/ingest`, `/health`) plus an MCP tool at `/mcp` (see `backend/mcp_server.py`), all over the `graphrag.answer()` service. Deployed on Render free tier. |
-| **Frontend** | **Next.js 16** (App Router, React 19) + Tailwind v4 + reactflow | Chat UI + a `/benchmark` page + an interactive reasoning-path graph. Static-generated benchmark page reads `results/summary.json` at build time. Deploys on Vercel. |
-| **Dashboard** | **Streamlit** | Zero-backend results dashboard (reads committed `results/` JSON). This is the always-on hosted demo — no LLM/DB/GPU needed. |
+| **Frontend** | **Next.js 16** (App Router, React 19) + Tailwind v4 + @xyflow/react | Chat UI + a `/benchmark` page + an interactive reasoning-path graph. Static-generated benchmark page reads `results/summary.json` at build time. Deploys on Vercel. |
+| **Dashboard** | **Streamlit** | Zero-backend results dashboard (reads committed `results/` JSON) — a static view of the ablation, not the hosted chat demo. No LLM/DB/GPU needed. |
 | **Chat demo (alt)** | **Gradio** (`app/chat_app.py`) | A *live* local chat over the ArangoDB `graph` arm; needs Ollama + ArangoDB, so it's run-it-yourself, not hosted. |
 | **Tooling** | ruff, pytest, pre-commit, GitHub Actions, Makefile | Standard hygiene. Tests run on CPU with fakes — no ML deps, DB, or LLM needed in CI. |
 
@@ -81,17 +81,21 @@ src/kgqa/
                    Every arm imports from here so nothing can silently diverge.
   prompts.py       Benchmark + chat system prompts. Identical string across arms.
   llm.py           call_ollama() — the one direct Ollama entry point.
-  providers.py     Multi-provider chain (groq/gemini/ollama) with per-task fallback.
+  providers.py     Provider chain (gemini → ollama) for the one task, `synthesize`.
                    Used by the hosted service, NOT the benchmark.
   data.py          Seeded PubMedQA sampling + canonical per-section chunking.
   evaluation.py    FuzzyEvaluator (extract yes/no/maybe), Evaluator (metrics),
                    mcnemar_test (paired significance). No plotting import.
-  models.py        Lazy loaders: encoder, reranker, connect_arango, connect_neo4j.
+  models.py        Lazy loaders: encoder (sentence-transformers, or torch-free
+                   OnnxEncoder when KGQA_ENCODER=onnx), reranker,
+                   connect_arango, connect_neo4j.
   retrieval/
     base.py        ChunkStore (in-memory cosine search) + BaseRetriever
-                   (encode → optional rerank → select → build context → answer).
+                   (encode → optional rerank → select → build context → answer)
+                   + GraphExpansionMixin (shared gather_studies for both graph backends).
     plain.py       PlainRetriever → arms "plain" / "plain_rr".
-    graph.py       GraphRetriever (ArangoDB/AQL) → arms "graph" / "graph_concepts".
+    graph.py       GraphRetriever (ArangoDB/AQL) → arms "graph" / "graph_concepts" /
+                   "graph_norr" (parent expansion, no reranker — unrun so far).
     neo4j_graph.py Neo4jGraphRetriever (parallel impl, same interface) — demo only.
   service.py       answer(question, graph_id) — the ONE entry point a web backend
                    calls. Caches stores/retrievers/connections; builds reasoning_path.
@@ -114,13 +118,13 @@ scripts/run_benchmark.py --arm X
      build_retriever(X) → retriever.answer_benchmark(question)
          encode → rerank → select top-k → build context → call_ollama
      FuzzyEvaluator.extract_answer → Evaluator.record
-     writes results/{arm}_results.json   (checkpoints every 25 Qs)
+     writes results/{arm}_results.json   (atomic checkpoints every 25 Qs; --resume)
                           ▼
 scripts/compare.py ──► results/summary.json + summary.md + ablation.png
      (per-arm table + adjacent-arm McNemar contrasts)
                           ▼
 results/summary.json  ← the canonical artifact. Consumed by:
-     • RESULTS.md (hand-written to match)
+     • RESULTS.md, README, docs/index.md (hand-copied to match — not generated)
      • app/dashboard.py (Streamlit)
      • frontend/app/benchmark (Next.js, at build time)
      • tests/test_results_regression.py (CI gate)
@@ -138,17 +142,21 @@ backend/main.py (FastAPI, Render)
 kgqa/service.py  answer(question, graph_id="demo")
    ├─ _get_retriever("demo") → Neo4jGraphRetriever (cached)
    │     store = ChunkStore.from_neo4j (vectors pre-computed at ingest; cached pickle)
-   ├─ retriever._select(question)          # encode → rerank → top-k chunks
+   ├─ retriever.select(question)           # encode → (rerank) → top-k chunks
    ├─ retriever.gather_studies(candidates) # chunk → parent paper full abstract
    │                                       # (+ concept hop if use_concepts)
    ├─ call_llm("synthesize", …)            # gemini → ollama fallback chain
+   ├─ strip_think(...)                     # drop <think>…</think> reasoning
    └─ returns {answer, reasoning_path[], sources[]}
         ▼
-frontend renders answer + PMID links + ReasoningGraph (reactflow)
+frontend renders answer + PMID links + ReasoningGraph (@xyflow/react)
 ```
 
 Any `graph_id` other than `"demo"` routes to ArangoDB instead of Neo4j (for a
-real dataset a future `/ingest` might build). `/ingest` currently only resolves
+real dataset a future `/ingest` might build) — but `/query` 404s unknown
+`graph_id`s, so that branch is reachable only via `graphrag.answer()` directly.
+The hosted demo also runs with `KGQA_SKIP_RERANKER=true`, i.e. the unbenchmarked
+`graph_norr` configuration. `/ingest` currently only resolves
 the preloaded `"demo"` id and returns **501** for anything else — arbitrary
 document upload is explicitly out of scope for v1.
 
@@ -204,18 +212,19 @@ win.
 
 7. **Two graph backends on purpose.** ArangoDB for the immutable benchmark; Neo4j
    AuraDB Free for the hosted demo (small enough to be free-forever). See §2.
-   `neo4j_graph.py` is a deliberate parallel implementation with the same
-   `gather_studies` / `_build_context` interface, avoiding APOC so it works on any
-   AuraDB tier.
+   `neo4j_graph.py` is a deliberate parallel implementation of the backend
+   queries; like `GraphRetriever`, it inherits `gather_studies` from
+   `GraphExpansionMixin` (`retrieval/base.py`), so the orchestration is shared
+   and only the Cypher differs. It avoids APOC so it works on any AuraDB tier.
 
 8. **Per-task LLM provider chains.** Free cloud LLMs deprecate models without
    notice, so call sites pick a *task* (currently just `synthesize`) not a
    provider; the chain tries providers in order and falls back on any error.
 
-9. **`results/summary.json` is the one artifact everything points at.** README,
-   RESULTS.md, the Streamlit dashboard, the Next.js benchmark page, and the CI
-   regression gate all read the same file, so published numbers can't drift out
-   of sync. CI does **not** re-run the LLM benchmark (no GPU/DB); it guards the
+9. **`results/summary.json` is the one artifact everything points at.** The
+   Streamlit dashboard, the Next.js benchmark page, and the CI regression gate
+   read it directly; README, RESULTS.md, and docs/index.md are hand-copied from
+   it, so they *can* drift and must be updated together. CI does **not** re-run the LLM benchmark (no GPU/DB); it guards the
    artifact instead.
 
 10. **Ingestion runs once, offline; serving reads vectors.** Embeddings are
@@ -270,10 +279,10 @@ numbers could move):**
   prefix; other call sites depend on it.
 - **`BaseRetriever.chat()` calls Ollama directly**, but `service.answer()` uses
   the provider chain. So the Gradio chat (`app/chat_app.py`) needs local Ollama,
-  while the hosted FastAPI agent uses Gemini/Groq. Same "chat" word, different LLM
+  while the hosted FastAPI agent uses Gemini. Same "chat" word, different LLM
   path.
 - **The reasoning model emits `<think>…</think>`.** `FuzzyEvaluator`, the Gradio
-  app, and the frontend all assume this and strip it. A non-reasoning model won't
+  app, the hosted service (`service.strip_think`), and the frontend all strip it. A non-reasoning model won't
   break extraction but changes output shape.
 - **`num_predict` caps generation** so a runaway reasoning chain can't stall the
   Ollama server; the extractor tolerates a truncated chain. Don't remove the cap.
@@ -282,3 +291,6 @@ numbers could move):**
 - **`run_benchmark.py`'s Ollama auto-restart uses `pkill`**, which doesn't exist
   on Windows (it degrades to a no-op there). The benchmark is really meant for
   Linux/Colab.
+- **The published ArangoDB graph likely had duplicated `HAS_CONTEXT` edges** for
+  the labeled split (HAS_CONTEXT 209,971 vs Chunks 206,613). See the RESULTS.md
+  caveat; ingest now uses deterministic edge keys, and a re-run is needed.

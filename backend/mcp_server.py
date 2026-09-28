@@ -13,9 +13,23 @@ affinity required between calls.
 
 from __future__ import annotations
 
+import logging
+from typing import Annotated
+
 import anyio
 from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import Field
+
+logger = logging.getLogger(__name__)
+
+# Shared by REST /query (backend/main.py) and the MCP tool below: at most this
+# many answer() calls run at once, process-wide. Each one holds a worker
+# thread plus retrieval/LLM memory on a 512MB host, so unbounded concurrency
+# is an easy way to OOM it. Lives here (not main.py) because main.py imports
+# this module -- the reverse import would be circular.
+ANSWER_LIMITER = anyio.CapacityLimiter(3)
 
 mcp = FastMCP(
     "graphrag-pubmedqa",
@@ -39,7 +53,10 @@ mcp = FastMCP(
 
 
 @mcp.tool()
-async def ask_pubmed_graphrag(question: str, use_concepts: bool = False) -> dict:
+async def ask_pubmed_graphrag(
+    question: Annotated[str, Field(min_length=1, max_length=2000)],
+    use_concepts: bool = False,
+) -> dict:
     """Ask a biomedical question against the PubMedQA demo knowledge graph.
 
     Args:
@@ -64,6 +81,13 @@ async def ask_pubmed_graphrag(question: str, use_concepts: bool = False) -> dict
     # and concurrent MCP requests, for the full duration of the call. This
     # was caught live: the first real tool call on the deployed instance
     # wedged /health for the rest of its cold-start-plus-LLM-call duration.
-    return await anyio.to_thread.run_sync(
-        lambda: answer(question, graph_id="demo", use_concepts=use_concepts)
-    )
+    try:
+        return await anyio.to_thread.run_sync(
+            lambda: answer(question, graph_id="demo", use_concepts=use_concepts),
+            limiter=ANSWER_LIMITER,
+        )
+    except Exception:
+        # Same masking as REST /query: log the real cause server-side, never
+        # leak internals (hostnames, provider errors) to a public client.
+        logger.exception("MCP answering failed")
+        raise ToolError("Answering failed. Please try again.") from None

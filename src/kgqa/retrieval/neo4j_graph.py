@@ -21,14 +21,21 @@ from __future__ import annotations
 from ..config import CONCEPT_HOP_PAPERS
 from .base import BaseRetriever, Candidate, GraphExpansionMixin
 
+# One row per parent paper, in the rerank order of its best-ranked selected
+# chunk. Aggregating to (paper, min(i)) *before* expanding the paper's chunks
+# matters: expanding per seed chunk first would collect each section once per
+# selected sibling chunk (s0 s0 s1 s1) when 2+ selected chunks share a paper,
+# and a final ORDER BY on chunk key would discard the reranker's ordering.
 _PARENT_CYPHER = """
-UNWIND $keys AS ckey
-MATCH (chunk:Chunk {key: ckey})<-[:HAS_CONTEXT]-(paper:Paper)
+UNWIND range(0, size($keys) - 1) AS i
+MATCH (:Chunk {key: $keys[i]})<-[:HAS_CONTEXT]-(paper:Paper)
+WITH paper, min(i) AS rank
 MATCH (paper)-[:HAS_CONTEXT]->(c:Chunk)
-WITH paper, c
+WITH paper, rank, c
 ORDER BY c.key
-WITH paper, collect(c.text) AS texts
-RETURN DISTINCT paper.key AS paper, texts
+WITH paper, rank, collect(c.text) AS texts
+RETURN paper.key AS paper, texts
+ORDER BY rank
 """
 
 # NOTE -- known semantic divergence from graph.py's _CONCEPT_AQL (GAPS #9):
@@ -43,13 +50,14 @@ MATCH (seed:Paper) WHERE seed.key IN $paper_keys
 MATCH (seed)-[:MENTIONS]->(concept:Concept)<-[:MENTIONS]-(neighbour:Paper)
 WHERE NOT neighbour.key IN $paper_keys
 WITH neighbour, count(DISTINCT concept) AS shared
-ORDER BY shared DESC
+ORDER BY shared DESC, neighbour.key
 LIMIT $limit
 MATCH (neighbour)-[:HAS_CONTEXT]->(c:Chunk)
 WITH neighbour, shared, c
 ORDER BY c.key
 WITH neighbour, shared, collect(c.text) AS texts
 RETURN neighbour.key AS paper, texts, shared
+ORDER BY shared DESC, paper
 """
 
 
@@ -77,7 +85,12 @@ class Neo4jGraphRetriever(GraphExpansionMixin, BaseRetriever):
         keys = [_local_key(cid) for cid in chunk_ids]
         with self.driver.session() as session:
             rows = list(session.run(_PARENT_CYPHER, keys=keys))
-        return [(row["paper"], " ".join(row["texts"])) for row in rows]
+        # Belt-and-braces dedup (first occurrence wins, preserving order) so a
+        # query regression can never repeat a study in the LLM context.
+        out: dict[str, str] = {}
+        for row in rows:
+            out.setdefault(row["paper"], " ".join(row["texts"]))
+        return list(out.items())
 
     def _concept_neighbours(self, paper_keys: list[str]) -> list[tuple[str, str]]:
         with self.driver.session() as session:

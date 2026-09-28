@@ -36,6 +36,11 @@ GEMINI_API_URL = (
 _GEMINI_RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 _GEMINI_MAX_ATTEMPTS = 3
 _GEMINI_BACKOFF_SECONDS = 2.0
+_GEMINI_REQUEST_TIMEOUT = 60.0
+# Overall wall-clock budget across all attempts + backoff. The frontend aborts
+# /query at 200s; retrying 3 x 60s timeouts plus backoff (186s) before the
+# Ollama fallback even starts would blow straight through it.
+_GEMINI_DEADLINE_SECONDS = 90.0
 
 
 def call_gemini(prompt: str, system: str = "", temperature: float = LLM_TEMPERATURE) -> str:
@@ -43,12 +48,18 @@ def call_gemini(prompt: str, system: str = "", temperature: float = LLM_TEMPERAT
         raise RuntimeError("GEMINI_API_KEY is not set")
     text = f"{system}\n\n{prompt}" if system else prompt
     last_error: Exception | None = None
+    deadline = time.monotonic() + _GEMINI_DEADLINE_SECONDS
 
     for attempt in range(_GEMINI_MAX_ATTEMPTS):
         if attempt:
-            # Exponential: 2s, then 4s. Bounded well under the client's own
-            # timeout budget so a retry can't turn into a hang.
-            time.sleep(_GEMINI_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+            # Exponential: 2s, then 4s -- skipped if it would pass the deadline.
+            backoff = _GEMINI_BACKOFF_SECONDS * (2 ** (attempt - 1))
+            if time.monotonic() + backoff >= deadline:
+                break
+            time.sleep(backoff)
+        remaining = deadline - time.monotonic()
+        if remaining <= 1:
+            break
         try:
             resp = requests.post(
                 GEMINI_API_URL,
@@ -59,9 +70,14 @@ def call_gemini(prompt: str, system: str = "", temperature: float = LLM_TEMPERAT
                     "contents": [{"parts": [{"text": text}]}],
                     "generationConfig": {"temperature": temperature},
                 },
-                timeout=60,
+                timeout=min(_GEMINI_REQUEST_TIMEOUT, remaining),
             )
-        except requests.RequestException as exc:  # connection reset, read timeout, ...
+        except requests.exceptions.ReadTimeout as exc:
+            # The model accepted the request and then stalled for the full
+            # timeout; retrying just burns another timeout. Fall through the
+            # chain instead.
+            raise RuntimeError(f"Gemini read timed out: {exc}") from exc
+        except requests.RequestException as exc:  # connection reset, refused, ...
             last_error = RuntimeError(f"Gemini request failed: {exc}")
             continue
 
@@ -74,7 +90,7 @@ def call_gemini(prompt: str, system: str = "", temperature: float = LLM_TEMPERAT
             raise RuntimeError(f"Gemini {resp.status_code}: {resp.text[:500]}") from exc
         return _gemini_text(resp.json())
 
-    raise last_error if last_error else RuntimeError("Gemini call failed")
+    raise last_error if last_error else RuntimeError("Gemini call failed (deadline exceeded)")
 
 
 def _gemini_text(payload: dict) -> str:
@@ -95,7 +111,15 @@ def _gemini_text(payload: dict) -> str:
     if not parts:
         reason = candidate.get("finishReason", "unknown")
         raise RuntimeError(f"Gemini returned no text (finishReason={reason})")
-    return parts[0]["text"]
+    # Thinking models can return a leading ``thought: true`` part, and long
+    # answers can be split across several parts -- join every non-thought one.
+    text = "".join(
+        p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought")
+    )
+    if not text.strip():
+        reason = candidate.get("finishReason", "unknown")
+        raise RuntimeError(f"Gemini returned no answer text (finishReason={reason})")
+    return text
 
 
 def _call_ollama_task(prompt: str, system: str = "", temperature: float = LLM_TEMPERATURE) -> str:

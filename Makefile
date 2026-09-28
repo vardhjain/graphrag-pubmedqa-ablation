@@ -26,8 +26,12 @@ format:  ## Auto-fix lint issues with ruff
 ingest:  ## Build the ArangoDB knowledge graph (needs ARANGO_PASS)
 	python scripts/ingest.py
 
-benchmark:  ## Run all four arms (needs ARANGO_PASS + Ollama)
-	@for arm in plain plain_rr graph graph_concepts; do \
+# The published Colab run used num_ctx=8192 (config.py's default is 4096; the
+# env var overrides it without touching config). Each result file's meta block
+# records the num_ctx actually used.
+benchmark:  ## Run all five arms: 4-arm ladder + graph_norr (needs ARANGO_PASS + Ollama)
+	@export LLM_NUM_CTX=8192; \
+	for arm in plain plain_rr graph graph_concepts graph_norr; do \
 		echo "===== $$arm ====="; \
 		python scripts/run_benchmark.py --arm $$arm --n 200; \
 	done

@@ -34,7 +34,7 @@ context, not by *broadening* it.
 
 ## Explore
 
-- **[Live demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask the hosted `graph`-arm chat agent a biomedical question directly
+- **[Live demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask the hosted chat agent a biomedical question directly (parent expansion without the reranker, on a 1,000-paper Neo4j graph — an unbenchmarked `graph_norr` configuration)
 - **[Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** — interactive bars, significance tests, per-class breakdown
 - **[Source code & README](https://github.com/vardhjain/graphrag-pubmedqa-ablation)** — package, scripts, tests, CI
 - **[Project report (PDF)](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf)** and **[slides](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)**

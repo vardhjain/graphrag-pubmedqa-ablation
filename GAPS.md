@@ -10,32 +10,32 @@ real.
 
 ---
 
-## 1. Live Neo4j credential sits in plaintext `.env` — SECURITY (HIGH)
+## 1. Live Neo4j credential was published in this file — SECURITY (CRITICAL)
 
-**What:** `.env` (repo root) contains a **real, active** Neo4j AuraDB URI, user,
-and password:
-```
-NEO4J_URI=neo4j+s://fc8ef905.databases.neo4j.io
-NEO4J_USER=fc8ef905
-NEO4J_PASSWORD=[REDACTED]
-```
-**Where:** `.env` (untracked — confirmed **not** in git history, and `.gitignore`
-line 18 excludes it — good). But it is a live secret readable by anything with
-disk/session access, and it has been surfaced in tooling output.
+**What:** `.env` (repo root, untracked and gitignored) holds the real Neo4j
+AuraDB URI, user, and password for the demo graph. That part is fine. The problem:
+an earlier revision of **this file** quoted all three values verbatim, and GAPS.md
+*is* tracked — so from commit `299a164` onward the live password sat in plaintext
+in the public GitHub repo's history. The values are now redacted here
+(2026-09-27), but redaction doesn't un-publish them: every clone, fork, and
+GitHub's own cache of those commits still has them.
 
 **Why it matters:** These credentials grant write access to the demo graph
-database. Anyone who obtains them can read or wipe the hosted demo's data. Because
-the secret has now been exposed outside its intended store, it should be treated
-as compromised regardless of the (correct) gitignore.
+database. Anyone who obtains them can read or wipe the hosted demo's data. The
+secret must be treated as compromised.
 
-**Fix:**
-1. Rotate the AuraDB password in the Neo4j console; update the Render env var
-   `NEO4J_PASSWORD` and your local `.env`.
-2. Consider using `.env.local` or a secrets manager for real credentials and
-   keeping `.env` empty/placeholder like `.env.example`.
-3. Add a `detect-private-key`-style guard is already in `.pre-commit-config.yaml`;
-   confirm pre-commit is installed (`pre-commit install`) so a future secret can't
-   be committed by accident.
+**Fix (user-only — needs the Aura console):**
+1. **Rotate the AuraDB password** in the Neo4j console; update the Render env var
+   `NEO4J_PASSWORD` and your local `.env`. This is the only step that actually
+   closes the hole — rewriting history without rotating doesn't.
+2. Optionally purge the old value from history (`git filter-repo --replace-text`)
+   and force-push; only worth it *after* rotation, and it breaks existing clones.
+3. `detect-private-key` in `.pre-commit-config.yaml` would **not** have caught
+   this — it matches PEM key headers, not passwords. The `gitleaks` hook added
+   alongside this entry does; run `pre-commit install` once so it runs on commit.
+
+The lesson worth keeping: an audit document that quotes the secret it's warning
+about becomes the leak. Describe secrets by location, never by value.
 
 ---
 
@@ -61,11 +61,12 @@ overlapping ids, missing-`ids`-key positional fallback), run via the existing
 `pythonpath = ["src", "."]` pytest config so `scripts.compare` imports
 directly without touching `testpaths`.
 
-**Still open:** `scripts/run_benchmark.py` (retry/health-check/checkpoint
-logic) and `scripts/ingest.py` / `scripts/ingest_neo4j.py` remain untested —
-they need a live Ollama/DB to exercise meaningfully, so covering them is a
-separate, larger task (mocking the health-check/restart branches) rather than
-a one-file addition.
+**Since covered:** `scripts/run_benchmark.py`'s arm wiring and its new
+resume/meta/atomic-checkpoint logic are exercised by `tests/test_run_benchmark.py`.
+
+**Still open:** `scripts/ingest.py` / `scripts/ingest_neo4j.py` remain untested —
+they need a live DB to exercise meaningfully, so covering them is a separate,
+larger task rather than a one-file addition.
 
 ---
 
@@ -79,8 +80,10 @@ removed `call_groq`, `GROQ_API_KEY`/`GROQ_MODEL`/`GROQ_API_URL`, and the
 module docstring to describe only the `synthesize` task. Removed the now-dead
 `GROQ_API_KEY` env var from `render.yaml` and `backend/README.md`, and the
 corresponding Groq-specific tests from `tests/test_providers.py` (the
-provider-chain-fallback tests were repointed at `gemini`/`ollama`, the tasks
-that actually exist).
+provider-chain-fallback tests were repointed at `gemini`/`ollama`, the providers
+that actually exist). **Follow-up (2026-09-27):** `.env.example` still listed
+`GROQ_API_KEY`/`GROQ_MODEL` and `LLM_CHAIN_DECOMPOSE`/`LLM_CHAIN_EXTRACT`; those
+are now removed too.
 
 ---
 
@@ -200,7 +203,9 @@ stated "at minimum" fix; the except itself stays broad on purpose (narrowing it
 risks missing a legitimate transient error the fallback exists to protect
 against).
 
-**Still open — `service.py:84,106` and `providers.py:105`:** these are
+**Still open — the broad excepts in `service.py`'s graph-connection
+helpers (`_shared_db`, `_shared_neo4j_driver`) and
+`providers.py`'s `call_llm` chain loop:** these are
 hosted-agent-only instances of the same pattern (DB-connection degrade,
 provider-chain degrade), not reachable from the benchmark. Deliberately *not*
 touched: CLAUDE.md's own rule is "Error handling in the service degrades, never
@@ -276,13 +281,103 @@ pins that the two return identical results.
   correction: an entry can go stale by the code catching up to it, not just
   by the code drifting away from it — re-check before assuming a listed item
   is still live.
-- **`FuzzyEvaluator` defaults unparseable output to `"maybe"`**
-  (`evaluation.py:27,51`). This is a documented, deliberate choice, but it biases
-  errors toward the rare `maybe` class and can flatter/penalize an arm depending
-  on failure rate. Worth a one-line note in RESULTS.md's methodology.
+- ~~**`FuzzyEvaluator` defaults unparseable output to `"maybe"`**~~ — **FIXED
+  (documented):** RESULTS.md's methodology section now states the bias. The
+  behavior itself is deliberately unchanged (see #17 for the related
+  mis-scoring modes).
 - **No `.dockerignore`** — `docker compose` only runs ArangoDB (no app image), so
   low impact, but if an app Dockerfile is ever added, `.next/`, `node_modules/`,
   and `__pycache__/` will bloat the build context.
 - **`pkill`-based Ollama restart** (`scripts/run_benchmark.py:55`) is a no-op on
   Windows. Documented in a comment, but the benchmark is effectively
   Linux/Colab-only. Fine given the design, worth stating in CLAUDE.md (it is).
+
+---
+
+## 14. Published ArangoDB graph likely had duplicated `HAS_CONTEXT` edges — HIGH (open)
+
+**What:** The recorded ingest counts were 209,971 `HAS_CONTEXT` edges vs
+206,613 `Chunks` — a surplus of exactly 3,358, the labeled split's chunk count.
+`scripts/ingest.py` created edges without deterministic `_key`s, and notebook
+01 ran a labeled-only smoke ingest before the full ingest, so the labeled
+papers' edges were inserted twice.
+
+**Why it matters:** For labeled papers — the benchmark's own gold papers —
+`_PARENT_AQL` rebuilt each abstract with every section twice (S0 S0 S1 S1 …),
+and `graph_concepts`' shared-concept counts were inflated. Same information,
+no label leakage, but the graph-arm contexts are not the method as described,
+so the headline +22.5 pp is unconfirmed until re-run. Disclosed prominently in
+RESULTS.md.
+
+**Fixed so far:** `scripts/ingest.py` now writes edges with deterministic keys,
+so re-ingesting is idempotent.
+
+**Still open (needs live DB + GPU):** run the audit query (`LENGTH(HAS_CONTEXT)`
+vs `LENGTH(Chunks)`) against the published database; dedupe or re-ingest; re-run
+all arms and regenerate `results/`.
+
+---
+
+## 15. Committed `summary.json` has a stale schema; raw per-arm results never committed — MEDIUM (open)
+
+**What:** `results/summary.json` predates the `n_failed`, Wilson CI, recall@k,
+and Holm-adjusted-p fields `compare.py` now writes, and the per-arm
+`results/{arm}_results.json` files it is computed from were never committed, so
+nobody can regenerate or re-analyse the published run. (Holm on the committed
+contrasts: 1.6e-5 / 0.163 / 0.689 — conclusions unchanged.)
+
+**Mitigation in place:** `run_benchmark.py` now checkpoints atomically, supports
+`--resume`, and records run metadata; notebook 02 can save results to Google
+Drive so a Colab disconnect no longer loses them.
+
+**Fix (needs GPU run):** on the next benchmark run, commit the per-arm JSONs
+alongside the regenerated summary.
+
+---
+
+## 16. `graph_norr` arm has never been run — MEDIUM (open)
+
+**What:** `--arm graph_norr` (parent expansion without the reranker — the exact
+config the hosted demo serves) is wired into `run_benchmark.py`, `make
+benchmark`, and notebook 02, but there are no results. The hosted demo's
+accuracy is therefore unmeasured. **Fix:** include it in the next GPU run.
+
+---
+
+## 17. `FuzzyEvaluator` known mis-scoring modes — MEDIUM (open, deliberate)
+
+**What:** `extract_answer` takes the *first* yes/no/maybe match (a hedge like
+"no evidence… so yes" scores `no`), matches without `` word boundaries (e.g.
+"yes" inside a longer token), and relies on seeing an opening `<think>` tag to
+strip reasoning. **Why unchanged:** any fix changes the published numbers
+without a re-run to replace them. **Fix:** correct all three together on the
+next benchmark re-run and note it in RESULTS.md.
+
+---
+
+## 18. ArangoDB `_PARENT_AQL` orders sections lexicographically — LOW (open)
+
+**What:** Sections are sorted by chunk key as a string, so `_10` sorts before
+`_2`. Only 4 (unlabeled) papers have ≥10 sections, so the effect on the
+benchmark is negligible. The Neo4j parent query was fixed to order numerically.
+**Fix:** order by the parsed index in the AQL on the next re-run.
+
+---
+
+## 19. Keep-warm workflow is disabled and never achieved its schedule — LOW (open, user-only)
+
+**What:** GitHub disabled `.github/workflows/keep-warm.yml` for repository
+inactivity, and even while enabled its cron never ran at the intended cadence
+(GitHub schedules are best-effort). So the hosted backend cold-starts
+(60-120s) far more often than the docs implied. **Fix:** re-enable the
+workflow in the Actions tab, or use an external uptime pinger.
+
+---
+
+## 20. No per-IP rate limiting on `/query` and `/mcp` — LOW (open)
+
+**What:** Both endpoints are unauthenticated. A request-body size cap and a
+global concurrency limiter were added (protecting the 512MB instance from
+overload), but one client can still consume the whole Gemini free-tier quota.
+**Fix:** add per-IP rate limiting (e.g. a small token bucket middleware) if
+abuse appears.

@@ -15,9 +15,9 @@ uvicorn backend.main:app --reload
 
 | Endpoint | Method | Purpose |
 | --- | --- | --- |
-| `/health` | GET | liveness probe; also pinged by the keep-warm cron |
-| `/query` | POST | `{question, graph_id="demo", use_concepts=false}` -> `{answer, reasoning_path, sources}` |
-| `/ingest` | POST | `{dataset_id}` -> `{graph_id}`. Only preloaded dataset ids (currently `demo`) resolve; arbitrary document upload is out of scope for v1 (see the execution plan's scope warning) and returns `501`. |
+| `/health` | GET | liveness probe; returns `{status, demo_graph_loaded}` (whether the demo store is warm) |
+| `/query` | POST | `{question, graph_id="demo", use_concepts=false}` -> `{answer, reasoning_path, sources}`. Unknown `graph_id` -> `404`. |
+| `/ingest` | POST | `{dataset_id}` -> `{graph_id}`. Only preloaded dataset ids (currently `demo`) resolve; arbitrary document upload is out of scope for v1 and returns `501`. |
 | `/mcp` | MCP (streamable HTTP) | Same `graphrag.answer()` as `/query`, exposed as an MCP tool -- see below. |
 
 ## Use it as an agent (MCP)
@@ -47,7 +47,8 @@ Two things worth knowing before you rely on it:
 - **Cold start.** Render's free tier sleeps after ~15 min idle; the first tool
   call after a gap can take 60-120s while the instance wakes up and loads the
   vector store. Follow-up calls are ~15-20s.
-- **Unauthenticated, demo-scoped.** No auth, no rate limiting -- this is a
+- **Unauthenticated, demo-scoped.** No auth and no per-IP rate limiting (only a
+  body-size cap and a global concurrency limit) -- this is a
   portfolio demo over the same 1,000-paper labeled-split graph described
   below, not a production API.
 
@@ -58,13 +59,15 @@ a **Neo4j AuraDB Free** instance, not the ArangoDB the benchmark ablation
 uses. It's seeded by [`scripts/ingest_neo4j.py`](../scripts/ingest_neo4j.py)
 with **only the PubMedQA labeled split -- 1,000 papers, ~3,358 chunks,
 ~3,408 MeSH concepts** -- not the full ~62k-paper corpus RESULTS.md's
-numbers were benchmarked over. This is a deliberate scope limit (see
-RESULTS.md / the execution plan) so the hosted demo stays small enough for a
+numbers were benchmarked over. It also runs without the cross-encoder
+reranker (`KGQA_SKIP_RERANKER=true`) -- the unbenchmarked `graph_norr`
+configuration. This is a deliberate scope limit (see RESULTS.md) so the hosted demo stays small enough for a
 genuinely-free-forever graph DB tier, not a cost/reproducibility issue with
 the benchmark itself, which is untouched.
 
-Any other `graph_id` (e.g. a real dataset a future `/ingest` builds) still
-uses ArangoDB, same as the benchmark pipeline.
+Inside `graphrag.answer()`, any other `graph_id` routes to ArangoDB, same as
+the benchmark pipeline -- but `/query` 404s non-`demo` ids, so that path is
+only reachable by calling `graphrag.answer()` directly.
 
 Run once before the demo can answer with real graph expansion:
 ```bash
@@ -73,24 +76,26 @@ export NEO4J_USER=neo4j
 export NEO4J_PASSWORD=...
 python scripts/ingest_neo4j.py
 ```
-Without it, the backend still answers (falls back to encoding the labeled
+Without it, a local backend still answers (falls back to encoding the labeled
 split locally and skipping parent-document expansion) -- just without the
-graph's accuracy lift.
+graph's accuracy lift. On Render, `KGQA_DISABLE_DATASET_FALLBACK=true` disables
+that fallback, so `/query` returns a fast `502` instead.
 
 ## Deploy (Render, free tier)
 
 [`render.yaml`](../render.yaml) at the repo root is a Render Blueprint --
-connect the repo on Render and it's picked up automatically. Set the secret
-env vars (`NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `GEMINI_API_KEY`,
-`CORS_ORIGINS`) in the Render dashboard; `ARANGO_*` vars
-are only needed if you also want `/ingest` to build real ArangoDB-backed
-datasets. Nothing else to configure.
+connect the repo on Render and it's picked up automatically. Set the secrets
+(`NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`, `GEMINI_API_KEY`) in the Render
+dashboard. `ARANGO_*` vars are not used by the deployed API. The plain values in
+`render.yaml` (`CORS_ORIGINS`, `KGQA_*`, ...) apply on first creation only --
+see the auto-sync note below; mirror changes into the dashboard by hand.
 
-Free tier sleeps after ~15 min idle (30-50s cold start on the next request).
-[`.github/workflows/keep-warm.yml`](../.github/workflows/keep-warm.yml) pings
-`/health` every 10 minutes during daytime hours to keep it warm without
-burning the whole free-hours budget. Set the `BACKEND_URL` repo secret to the
-deployed Render URL once it exists.
+Free tier sleeps after ~15 min idle (60-120s cold start on the next request).
+[`.github/workflows/keep-warm.yml`](../.github/workflows/keep-warm.yml) is meant
+to ping `/health` every 10 minutes during daytime hours (needs the `BACKEND_URL`
+repo secret), but GitHub has disabled it for repository inactivity and its
+schedule was never reliable -- re-enable it in the Actions tab or use an
+external uptime pinger (GAPS #19).
 
 ### Fitting in 512MB: `KGQA_ENCODER=onnx`
 

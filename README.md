@@ -40,24 +40,27 @@ same seeded sample, same top-k. The accuracy delta between adjacent arms is
 attributable to exactly one component, and we report a **paired McNemar test** so
 you can tell a real effect from noise.
 
-![Architecture and 4-arm ablation](assets/architecture.svg)
+![Benchmark pipeline: ingestion, shared ChunkStore, and the 4-arm ablation](assets/architecture.svg)
+
+*The benchmark pipeline (ArangoDB + Ollama). The hosted demo is a separate
+deployment on Neo4j — see [Hosted agent](#hosted-agent).*
 
 ---
 
 ## Hosted agent
 
 **[▶ graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)** —
-a live chat agent (Next.js + FastAPI) that turns the winning `graph` arm into
-something you can actually ask questions to, with a reasoning-path
+a live chat agent (Next.js + FastAPI) built on the `graph` arm's
+parent-expansion mechanism that you can actually ask questions to, with a reasoning-path
 visualization of the graph traversal behind each answer. Backend is
 [`backend/`](backend/) on Render; frontend is [`frontend/`](frontend/) on
 Vercel. See [`backend/README.md`](backend/README.md) and
 [`frontend/README.md`](frontend/README.md) for setup and deployment.
 
 The backend free-tier instance sleeps after ~15 min idle -- the first request
-after a gap can take 30-150s to wake up and answer; a keep-warm cron
-([`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml)) limits
-how often that happens.
+after a gap can take 60-120s to wake up and answer; a keep-warm cron
+([`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml)) exists
+but is currently disabled by GitHub for inactivity, so expect cold starts.
 
 **Scope limit:** the hosted demo's graph (`graph_id="demo"`) runs on Neo4j
 AuraDB Free, seeded with only the PubMedQA **labeled split (1,000 papers)**
@@ -65,7 +68,11 @@ via [`scripts/ingest_neo4j.py`](scripts/ingest_neo4j.py) -- not the full
 ~62k-paper corpus the benchmark above was run over. That's a deliberate,
 documented tradeoff to keep the hosted demo on a genuinely free-forever tier;
 it doesn't affect the numbers in [RESULTS.md](RESULTS.md), which come from
-the untouched ArangoDB-based benchmark pipeline.
+the untouched ArangoDB-based benchmark pipeline. It also runs **without the
+cross-encoder reranker** (`KGQA_SKIP_RERANKER=true`, to fit Render's 512MB),
+i.e. the `graph_norr` configuration — not the benchmarked `graph` row. A
+`graph_norr` arm now exists in the benchmark but has **not been run yet**, so
+the demo's accuracy is unmeasured; treat it as a qualitative illustration.
 
 ### Use it as an agent (MCP)
 
@@ -117,7 +124,7 @@ src/kgqa/                 importable package — single source of truth
   providers.py            multi-provider LLM chain (hosted path: Gemini + Ollama fallback)
   data.py                 seeded sampling + canonical chunking
   evaluation.py           answer extraction, metrics, McNemar test
-  models.py               encoder (torch + ONNX) / reranker / ArangoDB loaders
+  models.py               encoder (torch + ONNX) / reranker / ArangoDB + Neo4j connectors
   service.py              graphrag.answer() -- the hosted agent's one entry point
   retrieval/
     base.py               ChunkStore + BaseRetriever (encode→rerank→select)
@@ -128,7 +135,7 @@ src/graphrag/             thin re-export of kgqa.service.answer for backend/
 scripts/
   ingest.py               build the leakage-free graph in ArangoDB (run once)
   ingest_neo4j.py         seed the hosted demo's Neo4j graph (run once)
-  run_benchmark.py        run one arm: --arm {plain,plain_rr,graph,graph_concepts}
+  run_benchmark.py        run one arm: --arm {plain,plain_rr,graph,graph_concepts,graph_norr}
   compare.py              summary table + McNemar + ablation figure
   verify_onnx_parity.py   proves the ONNX and torch encoders agree
 notebooks/
@@ -181,9 +188,9 @@ ollama serve & ollama pull deepseek-r1:8b
 
 ```bash
 python scripts/ingest.py                              # build the graph once
-make benchmark                                        # all four arms (n=200)
+make benchmark                                        # all arms incl. graph_norr (n=200)
 #   or run arms individually:
-#   python scripts/run_benchmark.py --arm plain --n 200   (plain_rr / graph / graph_concepts)
+#   python scripts/run_benchmark.py --arm plain --n 200   (plain_rr / graph / graph_concepts / graph_norr)
 python scripts/compare.py                             # table + McNemar + figure -> results/
 ```
 
@@ -195,6 +202,11 @@ once, then
 [`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/02_benchmark.ipynb)
 (set `ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets).
+
+`graph_norr` (parent expansion *without* the reranker — the hosted demo's
+configuration) is wired into `make benchmark` and notebook 02, but has **no
+published results yet**. The published run used `LLM_NUM_CTX=8192` (what
+`make benchmark` exports and the notebook sets); the config default is 4096.
 
 ---
 
@@ -242,9 +254,12 @@ See [app/README.md](app/README.md) for details.
 ## Results
 
 Seeded random sample of **n = 200** PubMedQA `pqa_labeled` questions (seed 42,
-identical across arms), `deepseek-r1:8b` via Ollama on an A100. Regenerate with
-`scripts/compare.py` (writes `results/summary.md` and `results/ablation.png`).
-Canonical numbers (and the honest write-up) live in [RESULTS.md](RESULTS.md).
+identical across arms), `deepseek-r1:8b` via Ollama on an A100. `scripts/compare.py`
+regenerates `results/summary.{json,md}` and `results/ablation.png`, but it needs the
+per-arm `results/{arm}_results.json` files from a benchmark run, which are **not
+committed** — so the numbers below cannot be regenerated from the repo alone.
+Canonical numbers (and the honest write-up, including a **caveat about duplicated
+graph edges in the published run**) live in [RESULTS.md](RESULTS.md).
 
 | Arm | Accuracy | Macro F1 | Avg latency | Adds |
 | --- | --- | --- | --- | --- |
@@ -271,10 +286,13 @@ Canonical numbers (and the honest write-up) live in [RESULTS.md](RESULTS.md).
    is what moves the needle — for only ~1 s over `plain_rr`. With the label
    leakage fixed, this is a clean, legitimate graph advantage.
 2. **Single-fragment retrieval is not enough for PubMedQA.** `plain` and
-   `plain_rr` land *below* the majority-class baseline (PubMedQA is ≈55% "yes"); a
+   `plain_rr` land well *below* the majority-class baseline: always answering
+   "yes" scores **56.5%** on this seeded sample (113 yes / 68 no / 19 maybe). A
    lone ~250-character section rarely contains enough to judge the question.
-   Context sufficiency — which the graph supplies — is the dominant factor, and
-   `graph` is the only arm that clears the trivial baseline.
+   Both graph arms clear that baseline only narrowly (`graph` by +3.0 pp; its
+   Wilson 95% CI of 52.6–66.1% overlaps it), so the absolute accuracy is not
+   the headline — the meaningful result is the **paired contrast against
+   `plain_rr`** on the same questions.
 3. **The reranker helps modestly but not significantly** at this sample size
    (+7 pp, p = 0.08).
 4. **Concept-hop expansion does not help here** (−2 pp, p = 0.69) and costs ~5×
@@ -297,8 +315,9 @@ make lint           # ruff
 make help           # all shortcuts (ingest, benchmark, compare, ...)
 ```
 
-CI runs ruff + pytest on every push/PR (Python 3.10 and 3.11). Unit tests inject
-fakes for the encoder, reranker, and ArangoDB, so the heavy ML dependencies are
+CI runs ruff + pytest on pushes to `main` and every PR (Python 3.10–3.13), plus a
+frontend lint/typecheck/build job. Unit tests inject fakes for the encoder,
+reranker, ArangoDB, and Neo4j, so the heavy ML dependencies are
 never needed just to verify the logic. Optionally `pre-commit install` to run
 ruff automatically on each commit.
 

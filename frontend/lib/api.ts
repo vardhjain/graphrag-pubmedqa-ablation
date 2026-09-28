@@ -39,9 +39,7 @@ export async function askQuestion(req: QueryRequest): Promise<QueryResponse> {
     });
 
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail ?? res.statusText);
-      throw new ApiError(detail, res.status);
+      throw new ApiError(await errorMessageFor(res), res.status);
     }
 
     return await res.json();
@@ -49,11 +47,33 @@ export async function askQuestion(req: QueryRequest): Promise<QueryResponse> {
     if (err instanceof ApiError) throw err;
     if (err instanceof Error && err.name === "AbortError") {
       throw new ApiError(
-        "The backend is waking up from a cold start and is taking longer than expected. Please try again in a moment."
+        "No answer after over 3 minutes. The backend is likely still processing your question " +
+          "(cold starts are slow) -- please wait about a minute before asking again, so two " +
+          "requests don't compete for the same small instance."
       );
     }
-    throw new ApiError("Could not reach the backend. Is it running / deployed?");
+    // fetch() rejects with a TypeError on network failure/CORS/DNS -- never
+    // surface the raw "Failed to fetch" to users.
+    throw new ApiError(
+      "Couldn't reach the demo backend. Check your connection, or retry shortly -- it may be restarting."
+    );
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function errorMessageFor(res: Response): Promise<string> {
+  if (res.status === 422) return "Question too long or invalid.";
+  if (res.status === 502 || res.status === 503 || res.status === 504) {
+    return "The demo backend is unavailable right now — retry shortly.";
+  }
+  const body: unknown = await res.json().catch(() => null);
+  const detail =
+    body && typeof body === "object" && "detail" in body
+      ? (body as { detail: unknown }).detail
+      : undefined;
+  // Only a plain-string detail is meant for humans; FastAPI validation
+  // errors are arrays of objects and would render as raw JSON.
+  if (typeof detail === "string" && detail.trim()) return detail;
+  return `The backend returned an error (HTTP ${res.status}). Please try again.`;
 }

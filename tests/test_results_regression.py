@@ -78,3 +78,19 @@ def test_graph_concepts_latency_within_bounds():
     data = _load()
     graph, concepts = _arm(data, "graph"), _arm(data, "graph_concepts")
     assert concepts["avg_latency"] < graph["avg_latency"] * 10
+
+
+def test_contrast_numbers_are_internally_consistent():
+    """Guard against hand-edits: each contrast's p_value must be what an exact
+    McNemar (binomial) test on its own gains/losses gives, and delta_acc must be
+    (gains - losses) / n. The committed file rounds p to 4 decimals, hence the
+    5e-5 tolerance (71/26 -> 5.46e-6 is stored as 0.0000)."""
+    from scipy.stats import binomtest
+
+    data = _load()
+    for c in data["contrasts"]:
+        g, lo = c["gains"], c["losses"]
+        expected_p = binomtest(g, g + lo, 0.5).pvalue if g + lo else 1.0
+        assert abs(c["p_value"] - expected_p) <= 5e-5, f"{c['from']}->{c['to']} p_value"
+        expected_delta = (g - lo) / data["n"] * 100
+        assert abs(c["delta_acc"] - expected_delta) <= 0.005 + 1e-9, f"{c['from']}->{c['to']} delta"

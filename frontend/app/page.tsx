@@ -1,9 +1,11 @@
 import Link from "next/link";
 import ChatPanel from "@/components/ChatPanel";
+import { deriveHeadline, fmtDelta, loadBenchmarkSummary, pWithOperator } from "@/lib/results";
 
 export default function Home() {
+  const { parentExpansion } = deriveHeadline(loadBenchmarkSummary());
   return (
-    <div className="flex flex-col h-screen bg-zinc-50">
+    <div className="flex flex-col h-dvh bg-zinc-50">
       <header className="border-b border-gray-200 bg-white px-6 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-semibold text-zinc-900">
@@ -18,9 +20,16 @@ export default function Home() {
             </Link>
           </div>
         </div>
-        <p className="text-sm text-zinc-500">
-          Graph-augmented retrieval over PubMedQA. Parent-document expansion lifts
-          accuracy +22.5pp over a reranked baseline (McNemar p&lt;0.0001) --
+        <p className="text-sm text-zinc-600">
+          Graph-augmented retrieval over PubMedQA.
+          {parentExpansion && (
+            <>
+              {" "}
+              Parent-document expansion changes accuracy by{" "}
+              {fmtDelta(parentExpansion.delta_acc)} over a reranked baseline (McNemar{" "}
+              {pWithOperator(parentExpansion)}) &mdash;
+            </>
+          )}{" "}
           see{" "}
           <a
             href="https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md"

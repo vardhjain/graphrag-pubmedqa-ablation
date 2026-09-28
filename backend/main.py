@@ -26,15 +26,18 @@ import os
 import sys
 import threading
 from contextlib import AsyncExitStack, asynccontextmanager
+from typing import Annotated
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from fastapi import FastAPI, HTTPException  # noqa: E402
+import anyio  # noqa: E402
+from fastapi import FastAPI, HTTPException, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from pydantic import BaseModel, Field  # noqa: E402
+from fastapi.responses import JSONResponse  # noqa: E402
+from pydantic import BaseModel, Field, StringConstraints  # noqa: E402
 
-from backend.mcp_server import mcp  # noqa: E402
+from backend.mcp_server import ANSWER_LIMITER, mcp  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -94,10 +97,28 @@ async def _lifespan(_app: FastAPI):
 app = FastAPI(
     title="GraphRAG hosted agent",
     description="GraphRAG vs PlainRAG on PubMedQA -- see /docs and RESULTS.md",
-    version="1.0.0",
+    version="1.1.0",
     lifespan=_lifespan,
 )
 app.router.routes.extend(_mcp_app.routes)
+
+# Every legitimate body here (a <=2000-char question) is tiny; refuse large
+# ones up front instead of letting them be read and parsed.
+_MAX_BODY_BYTES = 64 * 1024
+
+
+@app.middleware("http")
+async def _limit_body_size(request: Request, call_next):
+    length = request.headers.get("content-length")
+    if length is not None:
+        try:
+            too_big = int(length) > _MAX_BODY_BYTES
+        except ValueError:
+            return JSONResponse({"detail": "Invalid Content-Length."}, status_code=400)
+        if too_big:
+            return JSONResponse({"detail": "Request body too large."}, status_code=413)
+    return await call_next(request)
+
 
 # Frontend runs on a different origin (Vercel); allow it in explicitly via env
 # so this isn't wide open by default in production.
@@ -122,8 +143,11 @@ _KNOWN_GRAPH_IDS = set(_KNOWN_DATASETS.values())
 
 
 class QueryRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=2000)
-    graph_id: str = "demo"
+    # Stripped before the length check, so a whitespace-only question is a 422.
+    question: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
+    ]
+    graph_id: str = Field(default="demo", max_length=64)
     use_concepts: bool = False
 
 
@@ -134,7 +158,7 @@ class QueryResponse(BaseModel):
 
 
 class IngestRequest(BaseModel):
-    dataset_id: str
+    dataset_id: str = Field(max_length=64)
 
 
 class IngestResponse(BaseModel):
@@ -142,7 +166,9 @@ class IngestResponse(BaseModel):
 
 
 @app.get("/health")
-def health() -> dict:
+async def health() -> dict:
+    # async: a dict read never blocks, and a sync route would queue behind
+    # busy /query calls in the thread pool -- exactly when a probe matters.
     # A cheap readiness signal alongside liveness: reads the already-built
     # cache, never triggers a load. The first real observability into
     # whether the demo graph is actually warm, not just whether the process
@@ -153,7 +179,7 @@ def health() -> dict:
 
 
 @app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest) -> dict:
+async def query(req: QueryRequest) -> dict:
     from graphrag import answer
 
     if req.graph_id not in _KNOWN_GRAPH_IDS:
@@ -163,7 +189,11 @@ def query(req: QueryRequest) -> dict:
         )
 
     try:
-        return answer(req.question, graph_id=req.graph_id, use_concepts=req.use_concepts)
+        # Blocking call -> worker thread, capped by the limiter shared with MCP.
+        return await anyio.to_thread.run_sync(
+            lambda: answer(req.question, graph_id=req.graph_id, use_concepts=req.use_concepts),
+            limiter=ANSWER_LIMITER,
+        )
     except Exception as exc:
         logger.exception("Answering failed for graph_id=%r", req.graph_id)
         raise HTTPException(status_code=502, detail="Answering failed. Please try again.") from exc

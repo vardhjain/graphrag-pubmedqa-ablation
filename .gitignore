@@ -36,6 +36,7 @@ htmlcov/
 
 .vercel
 .env*
+!.env.example
 
 # ── Local HF cache dir mirroring render.yaml's HF_HOME for testing ────────────
 # Real downloaded model weights (~90MB+); never meant to be committed.

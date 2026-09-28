@@ -71,3 +71,28 @@ def test_neo4j_chunk_id_local_key_stripping(fake_encoder, fake_reranker):
     candidates = r._select("aspirin heart attack")
     studies = r.gather_studies(candidates)
     assert studies == [("1", "FULL ABSTRACT 1")]
+
+
+def test_neo4j_parent_expansion_dedupes_papers_in_rerank_order(fake_encoder):
+    """Two selected chunks from the same paper must yield that paper once, and
+    papers must come back in the order their chunks were selected (the fake
+    emits one row per seed key, so it can't mask duplication)."""
+    driver = FakeNeo4jDriver(abstracts={"1": "ABS 1", "2": "ABS 2"})
+    store = make_store(fake_encoder)
+    r = Neo4jGraphRetriever(store, fake_encoder, driver)
+
+    studies = r._parent_abstracts(["Chunks/2_1", "Chunks/1_0", "Chunks/2_0"])
+
+    assert studies == [("2", "ABS 2"), ("1", "ABS 1")]
+
+
+def test_neo4j_parent_cypher_aggregates_before_expanding():
+    """Structural guard for the s0 s0 s1 s1 bug: rank per paper must be
+    aggregated before the paper's chunks are expanded, and the final order
+    is by rank (rerank order), not by chunk key."""
+    from kgqa.retrieval.neo4j_graph import _CONCEPT_CYPHER, _PARENT_CYPHER
+
+    q = " ".join(_PARENT_CYPHER.split())
+    assert q.index("min(i) AS rank") < q.index("MATCH (paper)-[:HAS_CONTEXT]->(c:Chunk)")
+    assert q.rstrip().endswith("ORDER BY rank")
+    assert "ORDER BY shared DESC, paper" in " ".join(_CONCEPT_CYPHER.split())

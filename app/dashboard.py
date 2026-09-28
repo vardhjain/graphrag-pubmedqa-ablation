@@ -19,8 +19,14 @@ import streamlit as st
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_DIR = os.path.join(ROOT, "results")
-ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts"]
+ARM_ORDER = ["plain", "plain_rr", "graph", "graph_concepts", "graph_norr"]
 LABELS = ["yes", "no", "maybe"]
+
+
+def format_p(p: float) -> str:
+    """Same rule as scripts/compare.format_p (inlined: the Streamlit Cloud
+    deploy only ships app/'s light deps): never render a tiny real p as 0.0000."""
+    return "<0.0001" if p < 0.0001 else f"{p:.4f}"
 
 
 @st.cache_data
@@ -76,9 +82,11 @@ def main():
 
     # ── headline metrics ──────────────────────────────────────────────────────
     cols = st.columns(len(arms))
+    plain = next((a for a in arms if a["arm"] == "plain"), None)
     for col, arm in zip(cols, arms, strict=False):
-        delta = f"{arm['accuracy'] - arms[0]['accuracy']:+.1f} pp vs plain" \
-            if arm["arm"] != "plain" else None
+        # Only label a delta "vs plain" when a plain arm actually exists.
+        delta = f"{arm['accuracy'] - plain['accuracy']:+.1f} pp vs plain" \
+            if plain is not None and arm is not plain else None
         col.metric(arm["arm"], f"{arm['accuracy']:.1f}%", delta)
 
     st.success(
@@ -106,7 +114,7 @@ def main():
         st.bar_chart(df[["accuracy", "macro_f1"]], stack=False, color=["#2196F3", "#FF9800"])
         st.dataframe(
             df[["adds", "accuracy", "macro_f1", "avg_latency", "samples"]],
-            use_container_width=True,
+            width="stretch",
         )
 
     with right:
@@ -115,13 +123,13 @@ def main():
         cdf["contrast"] = cdf["from"] + " → " + cdf["to"] + "  (" + cdf["effect"] + ")"
         cdf["significant"] = cdf["significant"].map({True: "yes", False: "no"})
         # p_display (e.g. "<0.0001") avoids rendering a real, significant
-        # p-value (~1e-11 on the parent-expansion contrast) as the literal
+        # p-value (~5.5e-6 on the parent-expansion contrast) as the literal
         # "0.000000" -- fall back to formatting p_value for older summary.json
         # files generated before p_display existed.
-        cdf["p"] = cdf.get("p_display", cdf["p_value"].map(lambda p: f"{p:.4f}"))
+        cdf["p"] = cdf["p_display"] if "p_display" in cdf else cdf["p_value"].map(format_p)
         st.dataframe(
             cdf[["contrast", "delta_acc", "gains", "losses", "p", "significant"]],
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
         st.caption("Latency by arm (seconds / query)")
         st.bar_chart(df["avg_latency"], color="#26A69A", horizontal=True)

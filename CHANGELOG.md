@@ -6,6 +6,50 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- `graph_norr` benchmark arm — parent expansion without the reranker, the exact
+  configuration the hosted demo serves (not yet run; no results).
+- Benchmark results now record retrieved paper ids (for recall@k) and flag
+  failed LLM calls, which are excluded from McNemar pairing.
+- `compare.py` reports Wilson 95% CIs, recall@k, and Holm-adjusted p-values;
+  the `/benchmark` page surfaces them.
+- `run_benchmark.py`: `--resume`, run metadata, and atomic checkpoints;
+  notebook 02 can save results to Google Drive.
+- Graph-expansion degradation is counted and reported at the end of a run.
+- The chat UI's `use_concepts` toggle is wired up; Open-in-Colab badges.
+- gitleaks pre-commit hook; frontend lint/typecheck/build CI job; CI on
+  Python 3.10–3.13.
+
+### Changed
+- Graph expansion deduplicated into `GraphExpansionMixin`; `service.answer`
+  uses a public `BaseRetriever.select()` instead of `_select`.
+- Demo graph warms proactively at startup instead of via a no-op `/health`.
+- Frontend upgraded to Next 16.3.6 (security release) and migrated from
+  `reactflow` to `@xyflow/react`; chat UX fixes (auto-scroll, markdown,
+  latency display) and accessibility improvements.
+- `mcp` pinned `<2`.
+- Docs corrected: majority-class baseline (56.5%), hosted demo = unbenchmarked
+  `graph_norr` config, Groq references removed, `.env.example` rewritten,
+  prominent RESULTS.md caveat about duplicated graph edges in the published run.
+
+### Fixed
+- `ChunkStore.from_arango` pagination: one cursor instead of N racy
+  offset queries.
+- `/query` rejects unknown `graph_id` before it reaches the pipeline; MCP tool
+  validates input and masks internal errors.
+- Request-body size cap and a concurrency limiter on the hosted API.
+- Neo4j parent query deduplicates sections and orders them numerically.
+- A failed graph-DB connect is retried after a TTL instead of cached forever.
+- `<think>` reasoning is stripped on the hosted path (service and frontend).
+- `scripts/ingest.py` uses deterministic edge keys, so re-ingesting can no
+  longer duplicate `HAS_CONTEXT`/`MENTIONS` edges.
+- p-value display; the hosted demo's unbenchmarked config is disclosed.
+- `chat()` regression after the mixin refactor; dead code removed.
+
+### Security
+- Redacted a live Neo4j credential previously quoted in GAPS.md (rotation is
+  still required — see GAPS #1) and added gitleaks scanning.
+
 ## [1.1.0] — 2026-07-16
 
 The hosted-agent release: the winning `graph` arm becomes a live, deployed chat

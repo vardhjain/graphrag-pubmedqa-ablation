@@ -121,6 +121,7 @@ def connect_arango(cfg, max_retries: int = 5):
 
     cfg.require_password()
     client = ArangoClient(hosts=cfg.host)
+    last_exc: Exception | None = None
     for attempt in range(max_retries):
         try:
             sys_db = client.db("_system", username=cfg.user, password=cfg.password)
@@ -128,11 +129,18 @@ def connect_arango(cfg, max_retries: int = 5):
             db = client.db(cfg.db_name, username=cfg.user, password=cfg.password)
             print("[ArangoDB] Connected.")
             return db
-        except (ServerConnectionError, ArangoServerError):
+        # python-arango 8 surfaces some network failures as the builtin
+        # ConnectionError family (e.g. ConnectionAbortedError).
+        except (ServerConnectionError, ArangoServerError, ConnectionError) as exc:
+            if getattr(exc, "http_code", None) in (401, 403):
+                raise  # bad credentials won't fix themselves -- fail fast
+            last_exc = exc
+            if attempt + 1 >= max_retries:
+                break
             wait = (attempt + 1) * 5
             print(f"[ArangoDB] Attempt {attempt + 1} failed. Retrying in {wait}s...")
             time.sleep(wait)
-    raise ConnectionError("Could not connect to ArangoDB.")
+    raise ConnectionError("Could not connect to ArangoDB.") from last_exc
 
 
 def connect_neo4j(cfg, max_retries: int = 5):
@@ -147,14 +155,24 @@ def connect_neo4j(cfg, max_retries: int = 5):
     from neo4j.exceptions import ServiceUnavailable
 
     cfg.require_password()
+    last_exc: Exception | None = None
     for attempt in range(max_retries):
+        driver = None
         try:
             driver = GraphDatabase.driver(cfg.uri, auth=(cfg.user, cfg.password))
             driver.verify_connectivity()
             print("[Neo4j] Connected.")
             return driver
-        except ServiceUnavailable:
+        except ServiceUnavailable as exc:
+            last_exc = exc
+            if driver is not None:
+                try:
+                    driver.close()
+                except Exception:  # noqa: BLE001 - best-effort cleanup
+                    pass
+            if attempt + 1 >= max_retries:
+                break
             wait = (attempt + 1) * 5
             print(f"[Neo4j] Attempt {attempt + 1} failed. Retrying in {wait}s...")
             time.sleep(wait)
-    raise ConnectionError("Could not connect to Neo4j.")
+    raise ConnectionError("Could not connect to Neo4j.") from last_exc

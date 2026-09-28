@@ -7,6 +7,7 @@ CI. Figure generation lives in ``scripts/compare.py``.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -19,6 +20,19 @@ class FuzzyEvaluator:
     """Extracts a normalised yes/no/maybe from verbose model output."""
 
     def extract_answer(self, text: str) -> str:
+        """Map raw LLM output to yes/no/maybe.
+
+        Known failure modes (documented, deliberately NOT fixed -- changing
+        this would change every published number in results/summary.json):
+          * ``final answer: X`` takes the FIRST match, so a model that restates
+            the instruction ("...end with Final answer: yes/no/maybe") before its
+            real verdict can be scored on the echoed template.
+          * That pattern has no leading ``\\b``, so e.g. "semifinal answer: no"
+            also matches.
+          * ``<think>`` stripping needs both tags: an unterminated ``<think>``
+            (truncated by ``num_predict``) is left in place, so the fallback
+            last-yes/no/maybe scan runs over the reasoning chain itself.
+        """
         clean = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).lower()
         match = re.search(r"final answer\s*:\s*(yes|no|maybe)", clean)
         if match:
@@ -49,15 +63,24 @@ class Evaluator:
     # the one number this project's whole ablation exists to get right.
     failed: list = field(default_factory=list)
     # Paper keys _select() retrieved for this question, pre any graph
-    # expansion -- retrieval is identical across all 4 arms (only reranking
-    # differs), so recall@k over this set tests whether accuracy differences
+    # expansion. Retrieval is identical *within a reranker setting*:
+    # {plain, graph_norr} share the cosine top-k and {plain_rr, graph,
+    # graph_concepts} share the reranked top-k, so within each group recall@k over this set tests whether accuracy differences
     # come from retrieving different papers or from presenting the same
     # retrieved paper differently. See BaseRetriever.answer_benchmark.
     retrieved_papers: list = field(default_factory=list)
+    # Optional per-sample flags (run_benchmark.py): graph expansion fell back
+    # to raw chunks / LLM output hit the generation cap. Absent in old files.
+    degraded: list = field(default_factory=list)
+    truncated: list = field(default_factory=list)
+    # Optional run metadata (arm, seed, model, ...). Omitted from the saved
+    # JSON when empty so old-format consumers see exactly the old keys.
+    meta: dict = field(default_factory=dict)
 
     def record(self, ground_truth: str, prediction: str,
                latency: float = 0.0, sample_id: str | None = None,
-               failed: bool = False, retrieved_papers: list | None = None) -> None:
+               failed: bool = False, retrieved_papers: list | None = None,
+               degraded: bool = False, truncated: bool = False) -> None:
         pred = prediction.lower().strip()
         if pred not in LABELS:
             pred = "maybe"
@@ -67,6 +90,8 @@ class Evaluator:
         self.ids.append(sample_id)
         self.failed.append(failed)
         self.retrieved_papers.append(retrieved_papers or [])
+        self.degraded.append(bool(degraded))
+        self.truncated.append(bool(truncated))
 
     def n_failed(self) -> int:
         return sum(self.failed)
@@ -114,7 +139,13 @@ class Evaluator:
             "y_pred": self.y_pred,
             "ids": self.ids,
             "failed": self.failed,
+            "latencies": self.latencies,
             "retrieved_papers": self.retrieved_papers,
+            "degraded": self.degraded,
+            "truncated": self.truncated,
+            "n_degraded": sum(self.degraded),
+            "n_truncated": sum(self.truncated),
+            **({"meta": self.meta} if self.meta else {}),
         }
 
     def report(self) -> dict:
@@ -137,10 +168,33 @@ class Evaluator:
                                     labels=list(LABELS), zero_division=0))
         return self.summary()
 
-    def save(self, path: str) -> None:
-        with open(path, "w") as f:
+    def save(self, path: str, quiet: bool = False) -> None:
+        """Write summary() atomically (tmp file + os.replace), so a crash
+        mid-write can never leave a half-written JSON behind."""
+        tmp = path + ".tmp"
+        with open(tmp, "w") as f:
             json.dump(self.summary(), f, indent=2)
-        print(f"Results saved to {path}")
+        os.replace(tmp, path)
+        if not quiet:
+            print(f"Results saved to {path}")
+
+    @classmethod
+    def from_saved(cls, data: dict) -> Evaluator:
+        """Rebuild an Evaluator from a saved summary() dict (for --resume)."""
+        ev = cls(data.get("model", ""))
+        n = len(data.get("y_true", []))
+        ev.y_true = list(data.get("y_true", []))
+        ev.y_pred = list(data.get("y_pred", []))
+        ev.ids = list(data.get("ids") or [None] * n)
+        ev.failed = list(data.get("failed") or [False] * n)
+        ev.retrieved_papers = list(data.get("retrieved_papers") or [[] for _ in range(n)])
+        ev.degraded = list(data.get("degraded") or [False] * n)
+        ev.truncated = list(data.get("truncated") or [False] * n)
+        # Per-sample latencies aren't saved; spread the total so avg is preserved.
+        avg = data.get("avg_latency", 0.0)
+        ev.latencies = list(data.get("latencies") or [avg] * n)
+        ev.meta = dict(data.get("meta") or {})
+        return ev
 
 
 def mcnemar_test(y_true: list, pred_a: list, pred_b: list) -> dict:

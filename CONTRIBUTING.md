@@ -14,7 +14,7 @@ make install-dev          # or: pip install -r requirements-dev.txt
 pre-commit install        # optional: run ruff automatically on commit
 ```
 
-The unit tests inject fakes for the encoder, reranker, and ArangoDB, so you can
+The unit tests inject fakes for the encoder, reranker, ArangoDB, and Neo4j, so you can
 run the whole suite on CPU with **no GPU, Ollama, or database** required:
 
 ```bash
@@ -29,16 +29,22 @@ See the [Makefile](Makefile) (`make help`) for all shortcuts.
 | Path | What |
 | --- | --- |
 | `src/kgqa/` | the importable package (single source of truth) |
-| `src/kgqa/config.py` | **all** shared constants + env overrides |
-| `src/kgqa/retrieval/` | the four retrieval arms (`base`, `plain`, `graph`) |
-| `scripts/` | `ingest.py`, `run_benchmark.py`, `compare.py` |
+| `src/kgqa/config.py` | shared benchmark constants + env overrides |
+| `src/kgqa/retrieval/` | retrieval arms: `base`, `plain`, `graph` (ArangoDB), `neo4j_graph` (hosted demo) |
+| `src/kgqa/service.py`, `providers.py` | hosted-agent entry point (`graphrag.answer`) + LLM provider chain |
+| `scripts/` | `ingest.py`, `ingest_neo4j.py`, `run_benchmark.py`, `compare.py`, `verify_onnx_parity.py` |
+| `backend/` | FastAPI hosted agent + MCP endpoint (tests in `backend/test_*.py`) |
+| `frontend/` | Next.js chat UI + `/benchmark` page (`npm run lint`, `npx tsc --noEmit`) |
+| `app/` | Gradio chat + Streamlit results dashboard |
 | `notebooks/` | thin Colab wrappers (kept output-free) |
 | `tests/` | pytest suite (CPU-only via fakes) |
 
-> **Why no `configs/` directory?** Configuration is centralized in
-> `src/kgqa/config.py` as a typed dataclass with environment-variable overrides
-> (and an `.env.example` template). For this project that's safer and less
-> error-prone than scattering YAML/JSON config files; please keep new knobs there.
+> **Why no `configs/` directory?** Every knob that could affect the benchmark
+> (models, top-k, seed, sample size, DB configs) lives in `src/kgqa/config.py`
+> with environment-variable overrides — please keep new benchmark knobs there.
+> Hosted-only settings (`KGQA_*`, `GEMINI_*`, `CORS_ORIGINS`) are read next to
+> the code that uses them (`service.py`, `models.py`, `providers.py`,
+> `backend/main.py`). All are listed in `.env.example`.
 
 ## Ground rules for changes
 

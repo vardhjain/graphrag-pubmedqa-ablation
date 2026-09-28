@@ -167,3 +167,64 @@ def test_call_llm_raises_when_all_providers_fail(monkeypatch):
 
     with pytest.raises(RuntimeError, match="All providers failed"):
         providers.call_llm("synthesize", "prompt")
+
+
+def test_gemini_text_joins_non_thought_parts():
+    import kgqa.providers as providers
+
+    payload = {"candidates": [{"content": {"parts": [
+        {"text": "internal reasoning", "thought": True},
+        {"text": "Yes, "},
+        {"text": "it does."},
+    ]}}]}
+    assert providers._gemini_text(payload) == "Yes, it does."
+
+
+def test_gemini_text_raises_when_only_thoughts():
+    import kgqa.providers as providers
+
+    payload = {"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [
+        {"text": "thinking...", "thought": True}]}}]}
+    with pytest.raises(RuntimeError, match="MAX_TOKENS"):
+        providers._gemini_text(payload)
+
+
+def test_call_gemini_does_not_retry_read_timeout(monkeypatch):
+    import requests
+
+    import kgqa.providers as providers
+
+    monkeypatch.setattr(providers, "GEMINI_API_KEY", "k")
+    calls = []
+
+    def fake_post(*a, **k):
+        calls.append(1)
+        raise requests.exceptions.ReadTimeout("stalled")
+
+    monkeypatch.setattr(providers.requests, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="timed out"):
+        providers.call_gemini("prompt")
+    assert len(calls) == 1
+
+
+def test_call_gemini_respects_overall_deadline(monkeypatch):
+    import kgqa.providers as providers
+
+    monkeypatch.setattr(providers, "GEMINI_API_KEY", "k")
+    clock = [0.0]
+    monkeypatch.setattr(providers.time, "monotonic", lambda: clock[0])
+    timeouts = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        timeouts.append(timeout)
+        clock[0] += 80  # each attempt eats most of the budget
+        return FakeResp(status_code=503, text="busy")
+
+    monkeypatch.setattr(providers.requests, "post", fake_post)
+
+    with pytest.raises(RuntimeError, match="503"):
+        providers.call_gemini("prompt")
+    # Second attempt only gets what's left of the 90s budget; no third.
+    assert timeouts == [60.0, 10.0]
+    assert sum(timeouts) <= providers._GEMINI_DEADLINE_SECONDS

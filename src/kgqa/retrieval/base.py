@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import pickle
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -58,11 +59,30 @@ def _load_vector_cache(cache_file: str) -> dict | None:
 
 
 def _dump_vector_cache(cache_file: str, payload: dict) -> None:
-    """Write the pickle cache atomically so a mid-write kill can't corrupt it."""
-    tmp = f"{cache_file}.tmp"
-    with open(tmp, "wb") as f:
-        pickle.dump(payload, f)
-    os.replace(tmp, cache_file)
+    """Write the pickle cache atomically so a mid-write kill can't corrupt it.
+
+    A unique temp file in the same directory (so ``os.replace`` stays atomic,
+    and concurrent writers can't clobber each other's partial file). The cache
+    is an optimisation only: an unwritable/full disk is logged and ignored.
+    """
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(
+            prefix=os.path.basename(cache_file) + ".", suffix=".tmp",
+            dir=os.path.dirname(os.path.abspath(cache_file)),
+        )
+        with os.fdopen(fd, "wb") as f:
+            pickle.dump(payload, f)
+        os.replace(tmp, cache_file)
+        tmp = None
+    except OSError as exc:
+        print(f"[ChunkStore] Could not write vector cache {cache_file!r} ({exc}); continuing.")
+    finally:
+        if tmp is not None:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 class ChunkStore:
@@ -81,7 +101,7 @@ class ChunkStore:
 
     def search(self, query_emb: np.ndarray, k: int) -> list[int]:
         """Return indices of the top-k chunks by cosine similarity."""
-        if len(self) == 0:
+        if len(self) == 0 or k <= 0:
             return []
         q = _normalize(np.atleast_2d(np.asarray(query_emb, dtype=np.float32)))
         sims = (self.embeddings @ q[0])
@@ -295,21 +315,40 @@ class GraphExpansionMixin:
         visualization -- don't have to re-run the traversal themselves.
         """
         chunk_ids = [c.chunk_id for c in candidates]
+        raw = [(c.paper_key, c.text) for c in candidates]
+        self._last_degraded = False
         try:
             studies = self._parent_abstracts(chunk_ids)
-            seed_keys = [k for k, _ in studies]
-            if self.use_concepts and seed_keys:
-                for key, abstract in self._concept_neighbours(seed_keys):
-                    if key not in seed_keys and abstract:
-                        studies.append((key, abstract))
         except Exception as exc:  # graph unreachable -> degrade to raw chunks
             # Counted (GAPS #10), not just print()ed: on the benchmark path a
             # mass-degrade would quietly turn a graph arm into plain-arm
             # numbers while the run still "succeeds" -- a print() is easy to
             # miss in a 200-question log. scripts/run_benchmark.py reads this
             # counter's delta per question and reports the total at the end.
-            self._degraded_count = getattr(self, "_degraded_count", 0) + 1
-            print(f"[GraphRAG] {type(self).__name__} expansion failed ({exc}). "
-                  "Using raw chunks.")
-            studies = [(c.paper_key, c.text) for c in candidates]
+            self._mark_degraded(f"expansion failed ({exc})")
+            return raw
+        if not studies and candidates:
+            # Graph reachable but returned nothing for these chunks (e.g. a
+            # store/graph mismatch) -- an empty context would be worse than
+            # the raw chunks we already have.
+            self._mark_degraded("expansion returned no studies")
+            return raw
+
+        if self.use_concepts:
+            seed_keys = [k for k, _ in studies]
+            try:
+                neighbours = self._concept_neighbours(seed_keys) if seed_keys else []
+            except Exception as exc:  # keep the parent studies, drop only the hop
+                self._degraded_count = getattr(self, "_degraded_count", 0) + 1
+                print(f"[GraphRAG] {type(self).__name__} concept hop failed ({exc}). "
+                      "Keeping parent studies only.")
+                neighbours = []
+            for key, abstract in neighbours:
+                if key not in seed_keys and abstract:
+                    studies.append((key, abstract))
         return studies
+
+    def _mark_degraded(self, why: str) -> None:
+        self._degraded_count = getattr(self, "_degraded_count", 0) + 1
+        self._last_degraded = True
+        print(f"[GraphRAG] {type(self).__name__} {why}. Using raw chunks.")

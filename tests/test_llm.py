@@ -31,3 +31,18 @@ def test_call_ollama_builds_payload_and_returns_content(monkeypatch):
     assert payload["stream"] is False
     assert "num_predict" in payload["options"]   # generation cap is applied
     assert "keep_alive" in payload                # model kept resident
+
+
+def test_call_ollama_meta_returns_done_reason(monkeypatch):
+    import kgqa.llm as llm
+
+    class FakeResp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"message": {"content": "<think>long"}, "done_reason": "length"}
+
+    monkeypatch.setattr(llm.requests, "post", lambda url, json=None, timeout=None: FakeResp())
+    assert llm.call_ollama_meta("p") == ("<think>long", "length")
+    assert llm.call_ollama("p") == "<think>long"

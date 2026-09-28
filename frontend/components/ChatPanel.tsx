@@ -1,10 +1,49 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Component, type ReactNode, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { askQuestion, warmUpBackend, ApiError } from "@/lib/api";
+import { stripThink } from "@/lib/text";
 import type { ChatMessage } from "@/lib/types";
 import AnswerText from "./AnswerText";
-import ReasoningGraph from "./ReasoningGraph";
+
+// React Flow is heavy and browser-only -- load it on demand, only when a
+// user actually opens a reasoning path.
+const ReasoningGraph = dynamic(() => import("./ReasoningGraph"), {
+  ssr: false,
+  loading: () => <p className="text-xs text-gray-600 italic p-4">Loading graph...</p>,
+});
+
+// A rendering failure in the graph (bad reasoning_path shape, React Flow
+// error) must not take the whole chat down with it.
+class GraphErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <p className="text-xs text-gray-600 italic p-4">
+          The reasoning-path graph couldn&apos;t be displayed for this answer.
+        </p>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const STORAGE_KEY = "kgqa-chat-messages";
+
+function loadStoredMessages(): ChatMessage[] {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? (parsed as ChatMessage[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 const EXAMPLE_QUESTIONS = [
   "Do preoperative statins reduce postoperative atrial fibrillation?",
@@ -31,7 +70,7 @@ function LoadingBubble() {
 
   return (
     <div className="flex justify-start">
-      <div className="bg-gray-100 rounded-2xl px-4 py-3 text-sm text-gray-500 italic">
+      <div className="bg-gray-100 rounded-2xl px-4 py-3 text-sm text-gray-600 italic">
         {message}
       </div>
     </div>
@@ -44,11 +83,30 @@ export default function ChatPanel() {
   const [loading, setLoading] = useState(false);
   const [openReasoningFor, setOpenReasoningFor] = useState<number | null>(null);
   const [useConcepts, setUseConcepts] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // State updates are async, so `loading` alone can't stop a fast double
+  // click/Enter from firing two requests at the small backend.
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     warmUpBackend();
+    // Restore after mount (not in the initializer) so server and first client
+    // render match; keeps the chat when navigating to /benchmark and back.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMessages(loadStoredMessages());
+    setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // Storage full/blocked (private mode) -- persistence is best-effort.
+    }
+  }, [messages, hydrated]);
 
   // Without this, the viewport stays pinned at its scroll position from
   // before the request -- so the first long answer (and every one after it)
@@ -61,7 +119,8 @@ export default function ChatPanel() {
   }, [messages.length, loading]);
 
   async function send(question: string) {
-    if (!question.trim() || loading) return;
+    if (!question.trim() || inFlightRef.current) return;
+    inFlightRef.current = true;
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: question }]);
     setLoading(true);
@@ -76,7 +135,7 @@ export default function ChatPanel() {
         ...prev,
         {
           role: "assistant",
-          content: result.answer,
+          content: stripThink(result.answer ?? ""),
           sources: result.sources,
           reasoningPath: result.reasoning_path,
           latencyMs: performance.now() - start,
@@ -86,15 +145,23 @@ export default function ChatPanel() {
       const message = err instanceof ApiError ? err.message : "Something went wrong.";
       setMessages((prev) => [...prev, { role: "assistant", content: message, error: true }]);
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
+      // The input was disabled while loading; focus it once it re-enables.
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }
 
   return (
     <div className="flex flex-col h-full w-full max-w-3xl mx-auto">
-      <div className="flex-1 overflow-y-auto space-y-4 p-4">
+      <div
+        className="flex-1 overflow-y-auto space-y-4 p-4"
+        role="log"
+        aria-live="polite"
+        aria-label="Conversation"
+      >
         {messages.length === 0 && (
-          <div className="text-center text-gray-500 mt-12">
+          <div className="text-center text-gray-600 mt-12">
             <p className="mb-4">
               Ask a biomedical question. Answers are grounded in PubMed abstracts
               retrieved via a knowledge graph -- click a sample question to try it.
@@ -104,7 +171,7 @@ export default function ChatPanel() {
                 <button
                   key={q}
                   onClick={() => send(q)}
-                  className="text-sm px-3 py-2 rounded-full border border-gray-300 hover:border-blue-400 hover:text-blue-600 transition"
+                  className="text-sm px-3 py-2 rounded-full border border-gray-300 hover:border-blue-400 hover:text-blue-600 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   {q}
                 </button>
@@ -146,7 +213,7 @@ export default function ChatPanel() {
                     </>
                   )}
                   {m.latencyMs != null && (
-                    <span className="text-gray-400">
+                    <span className="text-gray-600">
                       {m.sources && m.sources.length > 0 ? " · " : ""}
                       answered in {(m.latencyMs / 1000).toFixed(1)}s
                     </span>
@@ -158,13 +225,15 @@ export default function ChatPanel() {
                 <div className="mt-2">
                   <button
                     onClick={() => setOpenReasoningFor(openReasoningFor === i ? null : i)}
-                    className="text-xs font-medium text-blue-600 hover:underline"
+                    className="text-xs font-medium text-blue-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
                   >
                     {openReasoningFor === i ? "Hide reasoning path" : "Show reasoning path"}
                   </button>
                   {openReasoningFor === i && (
                     <div className="mt-2 bg-white rounded-lg">
-                      <ReasoningGraph steps={m.reasoningPath} />
+                      <GraphErrorBoundary>
+                        <ReasoningGraph steps={m.reasoningPath} />
+                      </GraphErrorBoundary>
                     </div>
                   )}
                 </div>
@@ -178,7 +247,7 @@ export default function ChatPanel() {
       </div>
 
       <div className="px-4 pt-3 border-t border-gray-200">
-        <label className="flex items-center gap-2 text-xs text-gray-500">
+        <label className="flex items-center gap-2 text-xs text-gray-600">
           <input
             type="checkbox"
             checked={useConcepts}
@@ -206,16 +275,19 @@ export default function ChatPanel() {
         className="flex gap-2 p-4 pt-2"
       >
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Ask a biomedical question..."
+          aria-label="Ask a biomedical question"
+          maxLength={2000}
           disabled={loading}
-          className="flex-1 rounded-full border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:border-blue-400"
+          className="flex-1 rounded-full border border-gray-300 px-4 py-2 text-base sm:text-sm focus:outline-none focus:border-blue-400 focus-visible:ring-2 focus-visible:ring-blue-500"
         />
         <button
           type="submit"
           disabled={loading || !input.trim()}
-          className="rounded-full bg-blue-600 text-white px-5 py-2 text-sm font-medium disabled:opacity-40"
+          className="rounded-full bg-blue-600 text-white px-5 py-2 text-sm font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
         >
           Send
         </button>

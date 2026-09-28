@@ -305,3 +305,82 @@ def test_answer_benchmark_returns_answer_and_retrieved_paper_keys(fake_encoder, 
     assert retrieved_papers  # non-empty
     assert all(isinstance(k, str) for k in retrieved_papers)
     assert len(retrieved_papers) == len(set(retrieved_papers))  # de-duplicated
+
+
+def test_chunkstore_search_nonpositive_k_returns_empty(fake_encoder):
+    store = make_store(fake_encoder)
+    q = fake_encoder.encode(["aspirin"])
+    assert store.search(q, 0) == []
+    assert store.search(q, -1) == []
+
+
+class _ExpansionStub(GraphExpansionMixin):
+    def __init__(self, parents=None, parent_exc=None, concept_exc=None, use_concepts=True):
+        self.parents, self.parent_exc, self.concept_exc = parents, parent_exc, concept_exc
+        self.use_concepts = use_concepts
+
+    def _parent_abstracts(self, chunk_ids):
+        if self.parent_exc:
+            raise self.parent_exc
+        return list(self.parents)
+
+    def _concept_neighbours(self, paper_keys):
+        if self.concept_exc:
+            raise self.concept_exc
+        return [("99", "neighbour")]
+
+
+def _cands():
+    from kgqa.retrieval.base import Candidate
+
+    return [Candidate("Chunks/1_0", "1", "raw chunk 1")]
+
+
+def test_concept_hop_failure_keeps_parent_studies():
+    r = _ExpansionStub(parents=[("1", "FULL 1")], concept_exc=RuntimeError("hop down"))
+
+    assert r.gather_studies(_cands()) == [("1", "FULL 1")]
+    assert r._degraded_count == 1
+    assert r._last_degraded is False  # parent expansion itself succeeded
+
+
+def test_empty_parent_expansion_falls_back_to_raw_chunks():
+    r = _ExpansionStub(parents=[], use_concepts=False)
+
+    assert r.gather_studies(_cands()) == [("1", "raw chunk 1")]
+    assert r._degraded_count == 1
+    assert r._last_degraded is True
+
+
+def test_last_degraded_resets_on_success():
+    r = _ExpansionStub(parent_exc=RuntimeError("down"), use_concepts=False)
+    r.gather_studies(_cands())
+    assert r._last_degraded is True
+    r.parent_exc, r.parents = None, [("1", "FULL 1")]
+    r.gather_studies(_cands())
+    assert r._last_degraded is False
+
+
+def test_vector_cache_write_failure_is_logged_not_raised(tmp_path, monkeypatch):
+    import kgqa.retrieval.base as base
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(base.pickle, "dump", boom)
+    target = tmp_path / "vecs.pkl"
+
+    base._dump_vector_cache(str(target), {"x": 1})  # must not raise
+
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []  # temp file cleaned up
+
+
+def test_vector_cache_write_round_trips(tmp_path):
+    import kgqa.retrieval.base as base
+
+    target = tmp_path / "vecs.pkl"
+    base._dump_vector_cache(str(target), {"embeddings": [1]})
+
+    assert base._load_vector_cache(str(target)) == {"embeddings": [1]}
+    assert [p.name for p in tmp_path.iterdir()] == ["vecs.pkl"]

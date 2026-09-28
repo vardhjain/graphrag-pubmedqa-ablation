@@ -12,8 +12,10 @@ can draw the traversed subgraph without re-deriving it from the answer text.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 import threading
+import time
 from dataclasses import dataclass, field
 
 from .config import ArangoConfig, Neo4jConfig
@@ -34,6 +36,13 @@ _STORE_CACHE: dict[str, ChunkStore] = {}
 _RETRIEVER_CACHE: dict[tuple[str, bool], GraphRetriever | Neo4jGraphRetriever] = {}
 _ARANGO_DB_CACHE: dict[str, object] = {}  # keyed by graph_id -- non-demo datasets only
 _NEO4J_DRIVER_CACHE: dict[None, object] = {}  # single slot -- only ever serves the demo graph
+# A failed connect is cached as None *with a timestamp* (keyed like the caches
+# above) and retried once it's older than this, so one transient outage at
+# startup (e.g. a paused AuraDB instance) doesn't pin the process to
+# ungraphed retrieval until the next restart.
+_CONNECT_RETRY_SECONDS = 60.0
+_ARANGO_FAILED_AT: dict[str, float] = {}
+_NEO4J_FAILED_AT: dict[None, float] = {}
 _ENCODER = None
 _RERANKER = None
 _CACHE_DIR = os.environ.get("KGQA_CACHE_DIR", os.path.join(tempfile.gettempdir(), "kgqa_cache"))
@@ -43,7 +52,7 @@ os.makedirs(_CACHE_DIR, exist_ok=True)
 # requests during a cold start were racing these lazy-singleton loaders:
 # two threads could both see e.g. `_ENCODER is None` and both call
 # `load_encoder()`, transiently doubling memory right when it's tightest (see
-# the Render OOM fix above) and crashing the worker mid-request for whichever
+# _shared_encoder's docstring on the 512MB tier) and crashing the worker mid-request for whichever
 # request lost the race. One lock per cache + double-checked locking fixes
 # the race while keeping the fast (already-loaded) path lock-free.
 _ENCODER_LOCK = threading.Lock()
@@ -106,26 +115,36 @@ def _shared_db(graph_id: str):
     and retriever. Used for real datasets ``/ingest`` has built -- the demo
     graph is served by Neo4j instead, see ``_shared_neo4j_driver``.
 
-    Returns ``None`` (cached, so this is tried at most once per process) if
-    ArangoDB isn't configured or isn't reachable -- ``GraphRetriever`` already
-    degrades to raw retrieved chunks when its ``db`` calls fail, so the
-    service still answers (without parent-document expansion) rather than
-    hard-crashing when no graph is available.
+    Returns ``None`` if ArangoDB isn't configured or isn't reachable --
+    ``GraphRetriever`` already degrades to raw retrieved chunks when its
+    ``db`` calls fail, so the service still answers (without parent-document
+    expansion) rather than hard-crashing. A failure is cached for
+    ``_CONNECT_RETRY_SECONDS`` and then retried, not cached forever.
     """
-    if graph_id not in _ARANGO_DB_CACHE:
+    if _needs_connect(_ARANGO_DB_CACHE, _ARANGO_FAILED_AT, graph_id):
         with _ARANGO_LOCK:
-            if graph_id not in _ARANGO_DB_CACHE:
+            if _needs_connect(_ARANGO_DB_CACHE, _ARANGO_FAILED_AT, graph_id):
                 from .models import connect_arango
 
                 try:
                     _ARANGO_DB_CACHE[graph_id] = connect_arango(
                         ArangoConfig(db_name=graph_id), max_retries=1
                     )
+                    _ARANGO_FAILED_AT.pop(graph_id, None)
                 except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
                     print(f"[GraphRAG] ArangoDB unavailable for graph_id={graph_id!r} ({exc}). "
                           "Falling back to ungraphed retrieval.")
                     _ARANGO_DB_CACHE[graph_id] = None
+                    _ARANGO_FAILED_AT[graph_id] = time.monotonic()
     return _ARANGO_DB_CACHE[graph_id]
+
+
+def _needs_connect(cache: dict, failed_at: dict, key) -> bool:
+    """True if ``key`` was never tried, or its cached failure has expired."""
+    if key not in cache:
+        return True
+    ts = failed_at.get(key)
+    return ts is not None and time.monotonic() - ts >= _CONNECT_RETRY_SECONDS
 
 
 def _shared_neo4j_driver():
@@ -134,21 +153,23 @@ def _shared_neo4j_driver():
     single-slot cache (not ``_ARANGO_DB_CACHE``) so there's no possibility of
     a graph_id string colliding with an internal cache key.
 
-    Returns ``None`` (cached, so this is tried at most once per process) if
-    Neo4j isn't configured or isn't reachable -- ``Neo4jGraphRetriever``
-    already degrades to raw retrieved chunks when its driver calls fail.
+    Returns ``None`` if Neo4j isn't configured or isn't reachable --
+    ``Neo4jGraphRetriever`` already degrades to raw retrieved chunks when its
+    driver calls fail. A failure is retried after ``_CONNECT_RETRY_SECONDS``.
     """
-    if None not in _NEO4J_DRIVER_CACHE:
+    if _needs_connect(_NEO4J_DRIVER_CACHE, _NEO4J_FAILED_AT, None):
         with _NEO4J_LOCK:
-            if None not in _NEO4J_DRIVER_CACHE:
+            if _needs_connect(_NEO4J_DRIVER_CACHE, _NEO4J_FAILED_AT, None):
                 from .models import connect_neo4j
 
                 try:
                     _NEO4J_DRIVER_CACHE[None] = connect_neo4j(Neo4jConfig(), max_retries=1)
+                    _NEO4J_FAILED_AT.pop(None, None)
                 except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
                     print(f"[GraphRAG] Neo4j unavailable for the demo graph ({exc}). "
                           "Falling back to ungraphed retrieval.")
                     _NEO4J_DRIVER_CACHE[None] = None
+                    _NEO4J_FAILED_AT[None] = time.monotonic()
     return _NEO4J_DRIVER_CACHE[None]
 
 
@@ -178,7 +199,7 @@ def _dataset_fallback_or_raise(graph_id: str, backend_name: str, encoder) -> Chu
     ``KGQA_DISABLE_DATASET_FALLBACK=true`` (set in render.yaml) turns that
     crash-after-~150s into an immediate, clean error instead. Read from the
     environment here (not as a module-level constant) so it can't go stale if
-    set after import, same footgun as ``providers.py``'s GAPS entry.
+    set after import.
     """
     if os.environ.get("KGQA_DISABLE_DATASET_FALLBACK", "").lower() == "true":
         raise RuntimeError(
@@ -241,35 +262,55 @@ def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever 
 
         store = _get_store(graph_id)
         if graph_id == _DEMO_GRAPH_ID:
+            backend = _shared_neo4j_driver()
             retriever = Neo4jGraphRetriever(
-                store, _shared_encoder(), _shared_neo4j_driver(),
+                store, _shared_encoder(), backend,
                 reranker=_shared_reranker(), use_concepts=use_concepts,
             )
         else:
+            backend = _shared_db(graph_id)
             retriever = GraphRetriever(
-                store, _shared_encoder(), _shared_db(graph_id),
+                store, _shared_encoder(), backend,
                 reranker=_shared_reranker(), use_concepts=use_concepts,
             )
-        _RETRIEVER_CACHE[key] = retriever
+        # Don't pin a graph-less retriever: once the connect-retry window
+        # expires, the next request rebuilds it with a live backend.
+        if backend is not None:
+            _RETRIEVER_CACHE[key] = retriever
         return retriever
 
 
-def _build_reasoning_path(candidates, studies: list[tuple[str, str]]) -> list[dict]:
+def _build_reasoning_path(candidates, studies: list[tuple[str, str]],
+                          degraded: bool = False) -> list[dict]:
+    """Seed chunks, then HAS_CONTEXT parent papers, then MENTIONS neighbours.
+
+    When graph expansion degraded to raw chunks, no traversal happened, so no
+    parent_paper / concept steps are emitted -- the path must not claim edges
+    that were never walked.
+    """
     steps: list[ReasoningStep] = []
+    seen: set[tuple[str, str]] = set()
     seed_papers = {c.paper_key for c in candidates}
     for c in candidates:
+        if ("seed", c.chunk_id) in seen:
+            continue
+        seen.add(("seed", c.chunk_id))
         steps.append(ReasoningStep(kind="seed_chunk", node_id=c.chunk_id, label=c.text[:80]))
+    if degraded:
+        return [step.__dict__ for step in steps]
     for paper_key, _abstract in studies:
         if paper_key in seed_papers:
             for c in candidates:
-                if c.paper_key == paper_key:
+                if c.paper_key == paper_key and (paper_key, c.chunk_id) not in seen:
+                    seen.add((paper_key, c.chunk_id))
                     steps.append(
                         ReasoningStep(
                             kind="parent_paper", node_id=f"Papers/{paper_key}",
                             label=paper_key, from_node=c.chunk_id, edge="HAS_CONTEXT",
                         )
                     )
-        else:
+        elif (paper_key, "") not in seen:
+            seen.add((paper_key, ""))
             steps.append(
                 ReasoningStep(
                     kind="concept_neighbour", node_id=f"Papers/{paper_key}",
@@ -277,6 +318,28 @@ def _build_reasoning_path(candidates, studies: list[tuple[str, str]]) -> list[di
                 )
             )
     return [step.__dict__ for step in steps]
+
+
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_THINK_UNTERMINATED = re.compile(r"<think>.*\Z", re.DOTALL | re.IGNORECASE)
+_THINK_LEADING_CLOSE = re.compile(r"\A.*?</think>", re.DOTALL | re.IGNORECASE)
+_CUT_OFF_MESSAGE = (
+    "The model's reasoning was cut off before it produced an answer. Please try again."
+)
+
+
+def strip_think(text: str) -> str:
+    """Remove ``<think>...</think>`` reasoning from an LLM answer.
+
+    Handles paired blocks, an unterminated trailing ``<think>...`` (generation
+    capped mid-thought), and a stray leading ``...</think>`` (the opening tag
+    was dropped). Returns a short cut-off notice if nothing is left.
+    """
+    out = _THINK_BLOCK.sub("", text or "")
+    out = _THINK_UNTERMINATED.sub("", out)
+    out = _THINK_LEADING_CLOSE.sub("", out)
+    out = out.strip()
+    return out or _CUT_OFF_MESSAGE
 
 
 def answer(question: str, graph_id: str = "demo", use_concepts: bool = False) -> dict:
@@ -290,10 +353,13 @@ def answer(question: str, graph_id: str = "demo", use_concepts: bool = False) ->
     retriever = _get_retriever(graph_id, use_concepts=use_concepts)
     candidates = retriever.select(question)
     studies = retriever.gather_studies(candidates)
+    degraded = bool(getattr(retriever, "_last_degraded", False))
     context = format_studies(studies)
 
     response = call_llm("synthesize", build_prompt(context, question), system=CHAT_SYSTEM_PROMPT)
-    reasoning_path = _build_reasoning_path(candidates, studies)
+    reasoning_path = _build_reasoning_path(candidates, studies, degraded=degraded)
     sources = list(dict.fromkeys(c.paper_key for c in candidates))
 
-    return AnswerResult(answer=response, reasoning_path=reasoning_path, sources=sources).__dict__
+    return AnswerResult(
+        answer=strip_think(response), reasoning_path=reasoning_path, sources=sources
+    ).__dict__

@@ -14,7 +14,7 @@ services:
     environment:
       ARANGO_ROOT_PASSWORD: devpassword
     ports:
-      - "8529:8529"
+      - "127.0.0.1:8529:8529"  # localhost only -- devpassword must not be network-reachable
     volumes:
       - arango_data:/var/lib/arangodb3
 

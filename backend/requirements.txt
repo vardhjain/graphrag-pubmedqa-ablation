@@ -12,7 +12,7 @@ uvicorn[standard]>=0.29
 
 # MCP tool surface (mounted at /mcp) -- lets MCP clients (Claude Code, Claude
 # Desktop, Cursor, ...) use this agent as a tool via one URL.
-mcp>=1.9
+mcp>=1.24,<2        # 2.x removed mcp.server.fastmcp -- migrate deliberately
 
 # Torch-free ONNX encoder for the 512MB tier (KGQA_ENCODER=onnx -- see
 # src/kgqa/models.py:load_onnx_encoder and render.yaml). The CPU-torch pin

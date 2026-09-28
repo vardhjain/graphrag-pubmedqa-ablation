@@ -19,7 +19,8 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 import httpx
 import pytest
 from mcp import ClientSession
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
+from mcp.server.fastmcp.exceptions import ToolError
 
 from backend.main import app
 from backend.mcp_server import ask_pubmed_graphrag
@@ -100,34 +101,77 @@ async def test_mcp_round_trip_over_asgi(monkeypatch):
         },
     )
 
-    def http_client_factory(headers=None, timeout=None, auth=None):
-        return httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://localhost",  # mcp's DNS-rebinding guard allows this Host
-            headers=headers,
-            timeout=timeout or 30,
-            auth=auth,
-        )
-
     # ASGITransport doesn't run ASGI lifespan events on its own, so the MCP
     # session manager our app.lifespan starts (backend/main.py's _lifespan)
     # never gets going unless we enter the app's lifespan context ourselves --
     # this is the exact wiring a broken mount would fail at in production.
     async with app.router.lifespan_context(app):
-        async with streamablehttp_client(
-            "http://localhost/mcp", httpx_client_factory=http_client_factory
-        ) as (read, write, _):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
+        async with _session() as session:
+            tools = await session.list_tools()
+            assert "ask_pubmed_graphrag" in {t.name for t in tools.tools}
 
-                tools = await session.list_tools()
-                assert "ask_pubmed_graphrag" in {t.name for t in tools.tools}
+            result = await session.call_tool(
+                "ask_pubmed_graphrag", {"question": "does aspirin reduce heart attack risk?"}
+            )
+            assert not result.isError
+            assert "yes" in result.content[0].text
 
-                result = await session.call_tool(
-                    "ask_pubmed_graphrag", {"question": "does aspirin reduce heart attack risk?"}
-                )
-                assert not result.isError
-                assert "yes" in result.content[0].text
+            # Same session (the app's MCP session manager can only be started
+            # once per process, so protocol-level checks share this lifespan):
+            # schema validation rejects empty/oversized questions pre-answer().
+            for bad in ("", "x" * 2001):
+                result = await session.call_tool("ask_pubmed_graphrag", {"question": bad})
+                assert result.isError
+
+            # ...and an internal failure reaches the client masked.
+            def broken(*a, **k):
+                raise RuntimeError("secret-host.internal:7687 refused")
+
+            monkeypatch.setattr(graphrag, "answer", broken)
+            result = await session.call_tool("ask_pubmed_graphrag", {"question": "q?"})
+            assert result.isError
+            assert "Answering failed" in result.content[0].text
+            assert "secret-host" not in result.content[0].text
+
+
+class _session:
+    """Initialized MCP ClientSession over the in-process ASGI app, using the
+    non-deprecated streamable_http_client with a caller-owned httpx client."""
+
+    async def __aenter__(self):
+        from contextlib import AsyncExitStack
+
+        self._stack = AsyncExitStack()
+        client = await self._stack.enter_async_context(httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://localhost",  # mcp's DNS-rebinding guard allows this Host
+            timeout=30,
+        ))
+        read, write, _ = await self._stack.enter_async_context(
+            streamable_http_client("http://localhost/mcp", http_client=client)
+        )
+        session = await self._stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+        return session
+
+    async def __aexit__(self, *exc):
+        return await self._stack.__aexit__(*exc)
+
+
+@pytest.mark.anyio
+async def test_tool_masks_internal_errors(monkeypatch):
+    import graphrag
+
+    def broken(*a, **k):
+        raise RuntimeError("secret-host.internal:7687 refused")
+
+    monkeypatch.setattr(graphrag, "answer", broken)
+
+    with pytest.raises(ToolError) as info:
+        await ask_pubmed_graphrag("does aspirin help?")
+    assert str(info.value) == "Answering failed. Please try again."
+    assert info.value.__cause__ is None
+    assert "secret-host" not in str(info.value)
 
 
 @pytest.fixture

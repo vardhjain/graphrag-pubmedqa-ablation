@@ -60,3 +60,84 @@ def test_unknown_arm_raises():
 
     with pytest.raises(ValueError, match="unknown arm"):
         build_retriever("not_a_real_arm", store=None, encoder=None, reranker=None, db=None)
+
+
+# ── meta / resume / truncation helpers ────────────────────────────────────────
+def test_build_meta_records_run_settings():
+    from scripts.run_benchmark import build_meta
+
+    from kgqa import config
+
+    meta = build_meta("graph", 42, 200)
+    assert meta["arm"] == "graph" and meta["seed"] == 42 and meta["n_requested"] == 200
+    assert meta["llm_model"] == config.LLM_MODEL
+    assert meta["num_ctx"] == config.LLM_NUM_CTX
+    assert meta["num_predict"] == config.LLM_NUM_PREDICT
+    assert meta["complete"] is False
+    assert "git_sha" in meta
+
+
+def test_check_resume_accepts_matching_prefix():
+    from scripts.run_benchmark import check_resume
+
+    data = {"meta": {"arm": "graph", "seed": 42, "n_requested": 3}, "ids": ["a", "b"]}
+    assert check_resume(data, "graph", 42, 3, ["a", "b", "c"]) == ["a", "b"]
+
+
+def test_check_resume_rejects_mismatched_meta_or_order():
+    import pytest
+    from scripts.run_benchmark import check_resume
+
+    data = {"meta": {"arm": "graph", "seed": 42, "n_requested": 3}, "ids": ["a", "b"]}
+    with pytest.raises(ValueError, match="seed"):
+        check_resume(data, "graph", 7, 3, ["a", "b", "c"])
+    with pytest.raises(ValueError, match="arm"):
+        check_resume(data, "plain", 42, 3, ["a", "b", "c"])
+    with pytest.raises(ValueError, match="prefix"):
+        check_resume(data, "graph", 42, 3, ["b", "a", "c"])
+    with pytest.raises(ValueError):
+        check_resume({"ids": []}, "graph", 42, 3, ["a"])  # no meta at all
+
+
+def test_is_truncated_prefers_done_reason_then_heuristic():
+    from scripts.run_benchmark import is_truncated
+
+    assert is_truncated("<think>x</think> yes", "length") is True
+    assert is_truncated("<think>never closed", "stop") is False
+    assert is_truncated("<think>never closed", None) is True
+    assert is_truncated("<think>x</think> Final answer: yes", None) is False
+    assert is_truncated(None, "length") is False
+
+
+def test_done_reason_probe_wraps_base_call_ollama(monkeypatch):
+    from scripts.run_benchmark import install_done_reason_probe
+
+    import kgqa.llm as llm
+    import kgqa.retrieval.base as base
+
+    monkeypatch.setattr(base, "call_ollama", base.call_ollama)  # restored after test
+    monkeypatch.setattr(llm, "call_ollama_meta", lambda *a, **k: ("text", "length"))
+    last = install_done_reason_probe()
+    assert base.call_ollama("prompt", system="s") == "text"
+    assert last["reason"] == "length"
+
+
+def test_evaluator_roundtrip_through_saved_summary(tmp_path):
+    import json
+
+    from kgqa.evaluation import Evaluator
+
+    ev = Evaluator("graph")
+    ev.meta = {"arm": "graph", "seed": 42}
+    ev.record("yes", "yes", 1.5, sample_id="1", degraded=True)
+    ev.record("no", "maybe", 2.5, sample_id="2", truncated=True)
+    path = tmp_path / "r.json"
+    ev.save(str(path))
+    data = json.loads(path.read_text())
+    assert data["n_degraded"] == 1 and data["n_truncated"] == 1
+    assert data["meta"]["seed"] == 42
+
+    back = Evaluator.from_saved(data)
+    assert back.ids == ["1", "2"] and back.latencies == [1.5, 2.5]
+    assert back.degraded == [True, False] and back.truncated == [False, True]
+    assert back.summary()["accuracy"] == ev.summary()["accuracy"]

@@ -99,15 +99,15 @@ class FakeNeo4jSession:
 
     def run(self, query, **params):
         # Parent expansion: map chunk keys -> parent paper full abstracts.
+        # Deliberately one row per seed key, NOT deduped: the retriever must
+        # dedup itself, so a fake that pre-dedups can't mask duplication.
         if "HAS_CONTEXT]-(paper:Paper)" in query:
-            seen, out = set(), []
-            for ckey in params["keys"]:
-                pkey = ckey.rsplit("_", 1)[0]
-                if pkey in seen:
-                    continue
-                seen.add(pkey)
-                out.append(FakeNeo4jRecord(paper=pkey, texts=[self.driver.abstracts[pkey]]))
-            return out
+            self.driver.parent_queries.append(query)
+            return [
+                FakeNeo4jRecord(paper=(pkey := ckey.rsplit("_", 1)[0]),
+                                texts=[self.driver.abstracts[pkey]])
+                for ckey in params["keys"]
+            ]
         # Concept hop: return configured neighbours for the seed papers.
         if "MENTIONS]->(concept:Concept)" in query:
             seeds = set(params["paper_keys"])
@@ -125,6 +125,7 @@ class FakeNeo4jDriver:
     def __init__(self, abstracts, neighbours=()):
         self.abstracts = abstracts  # {paper_key: full abstract}
         self.neighbours = list(neighbours)  # [(paper_key, abstract), ...]
+        self.parent_queries: list[str] = []
 
     def session(self):
         return FakeNeo4jSession(self)

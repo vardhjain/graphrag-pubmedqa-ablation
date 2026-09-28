@@ -153,3 +153,48 @@ def test_ingest_known_dataset_returns_graph_id():
 def test_ingest_unknown_dataset_returns_501():
     resp = client.post("/ingest", json={"dataset_id": "my_arbitrary.pdf"})
     assert resp.status_code == 501
+
+
+def test_query_rejects_whitespace_only_question():
+    assert client.post("/query", json={"question": "   \n\t "}).status_code == 422
+
+
+def test_query_strips_question_whitespace(monkeypatch):
+    import graphrag
+
+    seen = {}
+
+    def fake_answer(question, graph_id="demo", use_concepts=False):
+        seen["q"] = question
+        return {"answer": "ok", "reasoning_path": [], "sources": []}
+
+    monkeypatch.setattr(graphrag, "answer", fake_answer)
+    assert client.post("/query", json={"question": "  aspirin?  "}).status_code == 200
+    assert seen["q"] == "aspirin?"
+
+
+def test_query_rejects_overlong_graph_id():
+    resp = client.post("/query", json={"question": "q", "graph_id": "x" * 65})
+    assert resp.status_code == 422
+
+
+def test_ingest_rejects_overlong_dataset_id():
+    assert client.post("/ingest", json={"dataset_id": "x" * 65}).status_code == 422
+
+
+def test_oversized_body_is_rejected_with_413():
+    body = '{"question": "' + "x" * (70 * 1024) + '"}'
+    resp = client.post("/query", content=body, headers={"content-type": "application/json"})
+    assert resp.status_code == 413
+
+
+def test_api_version_bumped():
+    assert app.version == "1.1.0"
+
+
+def test_rest_and_mcp_share_one_answer_limiter():
+    import backend.main as main
+    import backend.mcp_server as mcp_server
+
+    assert main.ANSWER_LIMITER is mcp_server.ANSWER_LIMITER
+    assert mcp_server.ANSWER_LIMITER.total_tokens == 3

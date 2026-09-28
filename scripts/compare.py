@@ -5,6 +5,11 @@
 Reads results/{arm}_results.json for whichever arms are present and writes
 figures + a markdown snippet to results/. The McNemar tests are paired on pubid,
 so they only run for arms evaluated on the same seeded sample.
+
+Result files written by run_benchmark.py carry a ``meta`` block. When present,
+it is checked: an incomplete run, or one whose seed / LLM model / n differs
+from the other arms, is loudly flagged and left out of the significance tests.
+Files without ``meta`` (older runs) are accepted as-is.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections import Counter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
@@ -34,6 +40,11 @@ ARM_ADDS = {
     "graph_norr": "+ parent-paper expansion, no reranker (hosted demo's config)",
 }
 # Adjacent-arm contrasts that isolate each component's contribution.
+# This list IS the Holm family, PRE-DECLARED: fixed before looking at any
+# result. Holm always adjusts over all len(CONTRASTS) of them -- a contrast
+# that can't be computed (arm missing / excluded) enters the family at p=1,
+# which never makes the others look *more* significant. So the family size
+# (and every adjusted p) can't silently depend on which files are on disk.
 CONTRASTS = [
     ("plain", "plain_rr", "reranker"),
     ("plain_rr", "graph", "parent expansion"),
@@ -42,21 +53,60 @@ CONTRASTS = [
 ]
 
 
-def load_results():
+def load_results(results_dir: str | None = None):
+    results_dir = results_dir or RESULTS_DIR
     out = {}
     for arm in ARM_ORDER:
-        path = os.path.join(RESULTS_DIR, f"{arm}_results.json")
+        path = os.path.join(results_dir, f"{arm}_results.json")
         if os.path.exists(path):
             with open(path) as f:
                 out[arm] = json.load(f)
     return out
 
 
+def _run_key(r: dict):
+    meta = r.get("meta") or {}
+    return (meta.get("seed"), meta.get("llm_model"), meta.get("n_requested"))
+
+
+def check_runs(results: dict) -> tuple[set, list[str]]:
+    """Return (arms to exclude from significance tests, warning messages).
+
+    Excluded: any arm whose meta says complete=False, or whose
+    (seed, llm_model, n_requested) differs from the most common one among
+    arms that carry meta. Arms without meta (legacy files) are never excluded.
+    """
+    excluded, warnings = set(), []
+    with_meta = {a: r for a, r in results.items() if r.get("meta")}
+    for arm, r in with_meta.items():
+        if r["meta"].get("complete") is False:
+            excluded.add(arm)
+            warnings.append(f"{arm}: INCOMPLETE run ({r['meta'].get('n_done')}/"
+                            f"{r['meta'].get('n_requested')} done)")
+    keys = [_run_key(r) for r in with_meta.values()]
+    if keys:
+        ref = Counter(keys).most_common(1)[0][0]
+        for arm, r in with_meta.items():
+            if _run_key(r) != ref:
+                excluded.add(arm)
+                warnings.append(f"{arm}: (seed, model, n)={_run_key(r)} != other arms' {ref}")
+    return excluded, warnings
+
+
+def run_provenance(results: dict, excluded: set) -> tuple:
+    """(seed, model) for summary.json: from the runs' meta when available,
+    else the current environment's config (the only option for legacy files)."""
+    metas = [r["meta"] for a, r in results.items() if r.get("meta") and a not in excluded]
+    seed = next((m["seed"] for m in metas if m.get("seed") is not None), RANDOM_SEED)
+    model = next((m["llm_model"] for m in metas if m.get("llm_model")), LLM_MODEL)
+    return seed, model
+
+
 def format_p(p: float) -> str:
     """Human-readable p-value that can't misrepresent a real effect as zero.
 
-    McNemar p-values on a clear effect (e.g. the parent-expansion contrast)
-    are often ~1e-11 -- round(p, 4) collapses that to the literal string
+    McNemar p-values on a clear effect (e.g. the parent-expansion contrast,
+    71 gains / 26 losses -> exact p ~5.5e-6) sit far below 1e-4 -- round(p, 4) collapses that to the literal string
     "0.0000", which reads as a data error on a project whose whole pitch is
     statistical rigor (the prose elsewhere correctly says "p < 0.0001", so
     the generated artifacts contradicting it is the bug, not the number).
@@ -86,7 +136,7 @@ def holm_adjust(p_values: list[float]) -> list[float]:
     Testing m contrasts at a raw alpha=0.05 each inflates the family-wise
     false-positive rate; Holm controls it while staying less conservative
     than a flat Bonferroni divide-by-m. The parent-expansion contrast's
-    p~1e-11 survives either way -- reporting the correction costs nothing
+    p~5.5e-6 survives either way -- reporting the correction costs nothing
     and heads off exactly the objection a project built on statistical
     rigor should expect.
     """
@@ -133,6 +183,14 @@ def main():
         print(f"No results found in {RESULTS_DIR}. Run scripts/run_benchmark.py first.")
         sys.exit(1)
 
+    excluded, run_warnings = check_runs(results)
+    if run_warnings:
+        print("\n" + "!" * 64)
+        print("  WARNING: some runs are not comparable -- excluded from significance tests:")
+        for w in run_warnings:
+            print(f"    - {w}")
+        print("!" * 64)
+
     lines = ["| Arm | Accuracy (95% CI) | Macro F1 | Recall@k | Avg latency (s) | n |",
              "| --- | --- | --- | --- | --- | --- |"]
     arms_json, max_n = [], 0
@@ -161,6 +219,9 @@ def main():
                           "macro_f1": round(f1, 2),
                           "recall_at_k": round(recall_k, 4) if recall_k is not None else None,
                           "avg_latency": round(lat, 1), "samples": n, "n_failed": n_failed,
+                          **{k: r[k] for k in ("n_degraded", "n_truncated") if k in r},
+                          **({"complete": r["meta"].get("complete")} if r.get("meta") else {}),
+                          **({"excluded_from_tests": True} if arm in excluded else {}),
                           "adds": ARM_ADDS.get(arm, "")})
 
     print("\n" + "=" * 64)
@@ -173,22 +234,28 @@ def main():
     # Two passes: Holm's adjustment needs every contrast's raw p-value before
     # any of them can be corrected, so compute them all first.
     raw = []
+    family_p = []  # one entry per pre-declared contrast; p=1 if not computable
     for a_name, b_name, desc in CONTRASTS:
-        if a_name not in results or b_name not in results:
-            continue
-        gt, pa, pb = aligned(results[a_name], results[b_name])
+        usable = (a_name in results and b_name in results
+                  and a_name not in excluded and b_name not in excluded)
+        gt, pa, pb = aligned(results[a_name], results[b_name]) if usable else ([], [], [])
         if not gt:
+            family_p.append(1.0)
+            raw.append(None)
             continue
         test = mcnemar_test(gt, pa, pb)
         acc_a = sum(p == g for p, g in zip(pa, gt, strict=False)) / len(gt)
         acc_b = sum(p == g for p, g in zip(pb, gt, strict=False)) / len(gt)
+        family_p.append(test["p_value"])
         raw.append({"a_name": a_name, "b_name": b_name, "desc": desc,
                    "delta_acc": (acc_b - acc_a) * 100, "test": test})
 
-    holm_p = holm_adjust([r["test"]["p_value"] for r in raw])
+    holm_p = holm_adjust(family_p)
 
     contrasts_json = []
     for r, p_holm in zip(raw, holm_p, strict=True):
+        if r is None:
+            continue
         test, d = r["test"], r["delta_acc"]
         sig_holm = p_holm < 0.05
         sig = "yes" if sig_holm else "no"
@@ -202,7 +269,7 @@ def main():
                                "delta_acc": round(d, 2), "gains": test["b_gains"],
                                "losses": test["c_losses"],
                                # Full precision, not rounded to 4dp -- a real
-                               # p~1e-11 must not collapse to the literal 0.0.
+                               # p~5.5e-6 must not collapse to the literal 0.0.
                                "p_value": test["p_value"],
                                "p_display": p_display,
                                "p_holm": p_holm,
@@ -218,11 +285,14 @@ def main():
         f.write("\n".join(lines) + "\n")
     print(f"\nWrote {md_path}")
 
+    seed, model = run_provenance(results, excluded)
     json_path = os.path.join(RESULTS_DIR, "summary.json")
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump({"n": max_n, "seed": RANDOM_SEED, "model": LLM_MODEL,
+        json.dump({"n": max_n, "seed": seed, "model": model,
                    "dataset": "PubMedQA (pqa_labeled)" if "PubMedQA" in DATASET_NAME
                    else DATASET_NAME,
+                   "holm_family": [f"{a}->{b}" for a, b, _ in CONTRASTS],
+                   **({"warnings": run_warnings} if run_warnings else {}),
                    "arms": arms_json, "contrasts": contrasts_json}, f, indent=2)
     print(f"Wrote {json_path}")
 
@@ -252,7 +322,7 @@ def _plot(results):
     ax.set_xticklabels(arms, rotation=15)
     ax.set_ylabel("%")
     ax.set_ylim(0, 100)
-    ax.set_title("4-arm ablation — PubMedQA")
+    ax.set_title(f"{len(arms)}-arm ablation — PubMedQA")
     ax.legend()
     for i, (a, f) in enumerate(zip(accs, f1s, strict=False)):
         ax.text(i - w / 2, a + 1, f"{a:.1f}", ha="center", fontsize=8)

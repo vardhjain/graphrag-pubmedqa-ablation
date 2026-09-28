@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { loadBenchmarkSummary } from "@/lib/results";
+import type { Metadata } from "next";
+import { deriveHeadline, fmtDelta, loadBenchmarkSummary, pWithOperator } from "@/lib/results";
 
-export const metadata = {
-  title: "Case study -- PubMed GraphRAG assistant",
+export const metadata: Metadata = {
+  title: "Case study",
   description:
     "How a confounded GraphRAG-vs-RAG comparison became a fair 4-arm ablation, plus the engineering behind hosting it as a live demo.",
 };
@@ -28,11 +29,7 @@ function Section({
 
 export default function CaseStudyPage() {
   const summary = loadBenchmarkSummary();
-  const graph = summary.arms.find((a) => a.arm === "graph");
-  const plainRr = summary.arms.find((a) => a.arm === "plain_rr");
-  const parentExpansion = summary.contrasts.find(
-    (c) => c.from === "plain_rr" && c.to === "graph"
-  );
+  const { armCount, parentExpansion, conceptHop, conceptLatencyRatio } = deriveHeadline(summary);
 
   return (
     <div className="min-h-screen bg-zinc-50">
@@ -44,7 +41,7 @@ export default function CaseStudyPage() {
               &larr; Back to chat
             </Link>
           </div>
-          <p className="text-sm text-zinc-500 mt-1">
+          <p className="text-sm text-zinc-600 mt-1">
             Does a knowledge graph actually help retrieval-augmented QA, once you stop
             cheating? A fair ablation, and the engineering behind turning it into a
             live agent.
@@ -70,7 +67,7 @@ export default function CaseStudyPage() {
 
         <Section title="The method">
           <p>
-            A controlled 4-arm ablation on{" "}
+            A controlled {armCount}-arm ablation on{" "}
             <a
               href="https://pubmedqa.github.io/"
               target="_blank"
@@ -83,14 +80,14 @@ export default function CaseStudyPage() {
           </p>
           <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 font-mono text-xs text-zinc-600 overflow-x-auto">
             plain &rarr; plain_rr &rarr; graph &rarr; graph_concepts
-            <div className="text-zinc-400 mt-1">
+            <div className="text-zinc-600 mt-1">
               (vector top-k) &rarr; (+ cross-encoder reranker) &rarr; (+ parent-document
               expansion) &rarr; (+ MeSH concept hop)
             </div>
           </div>
           <p>
             Corpus, chunking, embedder, reranker, prompt, LLM, random seed, sample size,
-            and top-k are identical across all four arms &mdash; centralized in one
+            and top-k are identical across all {armCount} arms &mdash; centralized in one
             config module every arm imports, so nothing can silently diverge. Graph
             context uses generic <code className="text-xs bg-gray-100 px-1 rounded">=== STUDY n ===</code>{" "}
             labels with no titles and no gold label anywhere near the prompt; a test
@@ -108,28 +105,30 @@ export default function CaseStudyPage() {
             walk back to its parent paper and hand the LLM the full reconstructed
             abstract instead of an isolated fragment.
           </p>
-          <div className="rounded-lg border border-gray-200 bg-white px-4 py-4 space-y-1">
-            {graph && plainRr && (
+          {parentExpansion && (
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-4 space-y-1">
               <p className="text-2xl font-semibold text-zinc-900">
-                +{((graph.accuracy - plainRr.accuracy)).toFixed(1)}pp accuracy
+                {fmtDelta(parentExpansion.delta_acc)} accuracy
               </p>
-            )}
-            <p className="text-zinc-500">
-              over the reranked baseline
-              {parentExpansion && (
-                <>
-                  , McNemar{" "}
-                  <span className="font-mono">
-                    p{parentExpansion.p_value < 0.0001 ? "<0.0001" : `=${parentExpansion.p_value}`}
-                  </span>
-                </>
-              )}
-            </p>
-          </div>
+              <p className="text-zinc-600">
+                over the reranked baseline, McNemar{" "}
+                <span className="font-mono">{pWithOperator(parentExpansion)}</span>
+              </p>
+            </div>
+          )}
           <p>
-            The further MeSH concept-hop arm doesn&apos;t clear significance against
-            the plain graph arm and costs roughly 5x the latency &mdash; so it&apos;s
-            not the arm this project ships. See{" "}
+            {conceptHop && (
+              <>
+                The further MeSH concept-hop arm{" "}
+                {conceptHop.significant ? "does" : "doesn’t"} clear significance against
+                the plain graph arm ({pWithOperator(conceptHop)})
+                {conceptLatencyRatio != null && (
+                  <> and costs roughly {conceptLatencyRatio.toFixed(1)}x the latency</>
+                )}{" "}
+                &mdash; so it&apos;s not the arm this project ships.{" "}
+              </>
+            )}
+            See{" "}
             <a
               href={`${REPO}/blob/main/RESULTS.md`}
               target="_blank"
@@ -226,7 +225,7 @@ export default function CaseStudyPage() {
                   ["Hosted-demo graph DB", "Neo4j AuraDB Free -- labeled-split-only demo graph"],
                   ["Hosted-demo LLM", "Gemini Flash, falling back to Ollama"],
                   ["Backend", "FastAPI on Render (free tier)"],
-                  ["Frontend", "Next.js 16 + Tailwind + reactflow, on Vercel"],
+                  ["Frontend", "Next.js 16 + Tailwind + React Flow (@xyflow/react), on Vercel"],
                   ["Dashboard", "Streamlit, reading committed results/ JSON directly"],
                 ].map(([k, v]) => (
                   <tr key={k} className="border-b border-gray-100 last:border-0">
