@@ -5,36 +5,51 @@
 
 ## What this is
 
-Most "GraphRAG beats RAG" demos are confounded — the graph pipeline quietly also
-gets a reranker, a different corpus, or even leaks the answer into the prompt.
-This project runs a **4-arm ablation** on [PubMedQA](https://pubmedqa.github.io/)
-where every layer (corpus, chunking, embedder, reranker, prompt, LLM, top-k, seed)
-is held constant, so the accuracy change between adjacent arms is attributable to
-exactly one component — verified with a paired **McNemar** test.
+AI assistants answer questions more reliably when they first look up relevant
+documents and read them before answering (*retrieval-augmented generation*, or
+**RAG**). A popular upgrade, **GraphRAG**, stores the documents in a *knowledge
+graph* that records how pieces of text relate, and uses those links to find
+better context.
 
-![Architecture and 4-arm ablation](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/assets/architecture.svg)
+Many demos claim GraphRAG beats plain RAG, but the comparisons are often unfair:
+the graph version quietly gets extra help, or the correct answer leaks into what
+the AI reads. This project removes those advantages and asks: **when everything
+else is held equal, which part of the graph actually helps?**
 
-## Results (n = 200, seed 42)
+We tested four setups on 200 yes/no/maybe questions from
+[PubMedQA](https://pubmedqa.github.io/), a dataset of questions about medical
+research papers. Each setup adds exactly one technique to the one before it, so
+every change in accuracy can be credited to a single cause.
 
-| Arm | Accuracy | Macro F1 | Adds |
+![Benchmark pipeline and the four setups](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/assets/architecture.svg)
+
+## Results
+
+| Setup | What it adds | Accuracy | Macro F1 |
 | --- | --- | --- | --- |
-| `plain` | 30.0% | 29.7% | baseline chunk RAG |
-| `plain_rr` | 37.0% | 35.2% | + cross-encoder reranker |
-| **`graph`** | **59.5%** | **50.5%** | + parent-paper expansion |
-| `graph_concepts` | 57.5% | 50.0% | + MeSH concept hop |
+| `plain` | Basic RAG: look up the 3 closest text fragments | 30.0% | 29.7% |
+| `plain_rr` | + a second model re-ranks the fragments | 37.0% | 35.2% |
+| **`graph`** | **+ follow the graph to each fragment's full abstract** | **59.5%** | **50.5%** |
+| `graph_concepts` | + also pull in papers sharing medical topics | 57.5% | 50.0% |
 
-![4-arm ablation](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/results/ablation.png)
+![Accuracy of the four setups](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/results/ablation.png)
 
-**The honest finding:** the graph's decisive, statistically significant win comes
-from **parent-document expansion** (`plain_rr → graph`: **+22.5 pp**, McNemar
-**p < 0.0001**). The reranker helps but isn't significant (+7 pp, p = 0.08), and
-MeSH concept-hop expansion does **not** help on this single-abstract dataset
-(−2 pp, p = 0.69) while costing ~5× the latency. The graph helps by *deepening*
-context, not by *broadening* it.
+**What we found:**
+
+- **Giving the AI the full abstract instead of one fragment was the decisive
+  win:** +22.5 percentage points, statistically significant (p < 0.0001).
+- **The re-ranker helped a little, but not conclusively** (+7 points, p = 0.08).
+- **Pulling in related papers did not help** (−2 points, p = 0.69) and made
+  answers about five times slower.
+
+The graph helps by *deepening* context (more of the right document), not by
+*broadening* it (more documents). We expected the opposite and report what the
+data showed. Method details and caveats are in
+[RESULTS.md](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md).
 
 ## Explore
 
-- **[Live demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask the hosted chat agent a biomedical question directly (parent expansion without the reranker, on a 1,000-paper Neo4j graph — an unbenchmarked `graph_norr` configuration)
-- **[Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** — interactive bars, significance tests, per-class breakdown
-- **[Source code & README](https://github.com/vardhjain/graphrag-pubmedqa-ablation)** — package, scripts, tests, CI
+- **[Live demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask a biomedical question and see the graph path behind the answer. It is a smaller version of the experiment (1,000 papers, no re-ranker), so treat it as an illustration; the first answer can take 1–2 minutes while the free-tier server wakes up.
+- **[Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** — interactive charts of the numbers above
+- **[Source code & README](https://github.com/vardhjain/graphrag-pubmedqa-ablation)** — code, tests, and how to run it yourself
 - **[Project report (PDF)](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf)** and **[slides](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)**
