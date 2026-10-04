@@ -115,7 +115,7 @@ services:
       - key: TOKENIZERS_PARALLELISM
         value: "false"
       - key: CORS_ORIGINS
-        # localhost:3123 is this project's own dev port (see .claude/launch.json);
+        # localhost:3123 is this project's own dev port;
         # localhost:3000 is plain `npm run dev`'s default; the vercel.app URL is
         # the deployed frontend (frontend/, Vercel project "graphrag-pubmedqa-ablation").
         # NOTE: Render doesn't auto-sync this plain `value:` field from render.yaml

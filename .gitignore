@@ -41,3 +41,6 @@ htmlcov/
 # ── Local HF cache dir mirroring render.yaml's HF_HOME for testing ────────────
 # Real downloaded model weights (~90MB+); never meant to be committed.
 .render-cache/
+
+# Local AI-assistant instructions (kept out of the public repo)
+CLAUDE.md

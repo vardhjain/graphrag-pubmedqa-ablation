@@ -1,8 +1,7 @@
 # PROJECT.md — Knowledge Graph Question Answering (GraphRAG vs PlainRAG on PubMedQA)
 
-> Orientation doc for an engineer or AI agent seeing this repo for the first time.
-> For operational rules and commands see [CLAUDE.md](CLAUDE.md); for known weaknesses
-> see [GAPS.md](GAPS.md).
+> Orientation doc for an engineer seeing this repo for the first time.
+> For known weaknesses see [GAPS.md](GAPS.md).
 
 ---
 

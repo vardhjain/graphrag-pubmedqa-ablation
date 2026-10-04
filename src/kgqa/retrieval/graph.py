@@ -47,7 +47,7 @@ _PARENT_AQL = """
 # is the intended semantics ("how many concepts they share with the seeds",
 # per the comment above). Left undisturbed rather than fixed blind: AQL
 # can't be exercised in this dev environment (tests fake db.aql.execute
-# entirely, see tests/conftest.py's FakeAQL), and CLAUDE.md's own rule is
+# entirely, see tests/conftest.py's FakeAQL), and this project's rule is
 # that retrieval/graph.py's queries must stay behavior-compatible without a
 # fresh benchmark run to re-validate against. Fix this AQL to explicitly
 # count unique concept keys per neighbour (e.g. COLLECT ... INTO groups,

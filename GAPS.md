@@ -177,7 +177,7 @@ neighbour` edge; `_CONCEPT_CYPHER` (`neo4j_graph.py`)'s `count(DISTINCT concept)
 is the correct, intended semantics. Fixing the AQL side means rewriting a live
 query with no way to execute or verify it in this dev environment (the test
 suite fakes `db.aql.execute` entirely — see `tests/conftest.py`'s `FakeAQL`,
-which pattern-matches query text rather than running it), and CLAUDE.md's own
+which pattern-matches query text rather than running it), and this project's
 rule is that these queries stay behavior-compatible without a fresh benchmark
 run to re-validate against. Both files now carry an explicit comment
 cross-referencing the other and stating which fix is needed
@@ -208,7 +208,7 @@ helpers (`_shared_db`, `_shared_neo4j_driver`) and
 `providers.py`'s `call_llm` chain loop:** these are
 hosted-agent-only instances of the same pattern (DB-connection degrade,
 provider-chain degrade), not reachable from the benchmark. Deliberately *not*
-touched: CLAUDE.md's own rule is "Error handling in the service degrades, never
+touched: this project's rule is "Error handling in the service degrades, never
 crashes ... Preserve this for anything on the hosted path," so narrowing or
 counting these would need a different mechanism (e.g. a metrics counter in a
 long-running FastAPI process, not a linear script's end-of-run summary) and
@@ -290,7 +290,7 @@ pins that the two return identical results.
   and `__pycache__/` will bloat the build context.
 - **`pkill`-based Ollama restart** (`scripts/run_benchmark.py:55`) is a no-op on
   Windows. Documented in a comment, but the benchmark is effectively
-  Linux/Colab-only. Fine given the design, worth stating in CLAUDE.md (it is).
+  Linux/Colab-only. Fine given the design.
 
 ---
 
