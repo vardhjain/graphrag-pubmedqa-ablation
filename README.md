@@ -2,7 +2,7 @@
 
 # 🧬 Knowledge Graph Question Answering
 
-### GraphRAG vs PlainRAG on PubMedQA — a fair, leakage-free, statistically-tested ablation
+### Does a knowledge graph actually make AI question answering better? A fair, measured test on medical research papers.
 
 [![CI](https://github.com/vardhjain/graphrag-pubmedqa-ablation/actions/workflows/ci.yml/badge.svg)](https://github.com/vardhjain/graphrag-pubmedqa-ablation/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/vardhjain/graphrag-pubmedqa-ablation/graph/badge.svg)](https://codecov.io/gh/vardhjain/graphrag-pubmedqa-ablation)
@@ -13,332 +13,289 @@
 [![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 [![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
-[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**MCP**](#use-it-as-an-agent-mcp) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app) &nbsp;·&nbsp; [**Results**](#results) &nbsp;·&nbsp; [**Why it's fair**](#why-the-original-comparison-was-unfair-and-what-changed) &nbsp;·&nbsp; [**Setup**](#setup)
+[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results**](#-results) &nbsp;·&nbsp; [**How it works**](#-how-the-experiment-works) &nbsp;·&nbsp; [**Run it yourself**](#-run-it-yourself) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 
 Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
 
 </div>
 
-A controlled study of **what a knowledge graph actually contributes** to
-retrieval-augmented question answering on biomedical literature
-([PubMedQA](https://pubmedqa.github.io/)).
+## 👋 The short version
 
-Most "GraphRAG beats RAG" demos are confounded: the graph pipeline quietly also
-gets a reranker, a different corpus, or — worst of all — leaks the answer into
-the prompt. This repo throws those out and runs a **4-arm ablation** where every
-layer is held constant and the *only* thing that changes is how much graph
-structure the retriever uses.
+AI assistants answer questions more reliably when they first look up relevant
+documents and read them before answering (this is called *retrieval-augmented
+generation*, or **RAG**). A popular upgrade is **GraphRAG**: store the documents
+in a *knowledge graph* that records how pieces of text relate to each other, and
+use those links to find better context.
 
-```
-plain ─► plain_rr ─► graph ─► graph_concepts
- (RAG)   (+rerank)   (+parent  (+MeSH concept
-                      expansion) hop)
-```
+Many demos claim GraphRAG beats plain RAG, but the comparisons are often
+unfair: the graph version quietly gets extra help, or the correct answer leaks
+into what the AI reads. This project removes those advantages and asks a
+narrower question: **when everything else is held equal, which part of the
+graph actually helps?**
 
-Same corpus, same chunking, same embedder, same reranker, same prompt, same LLM,
-same seeded sample, same top-k. The accuracy delta between adjacent arms is
-attributable to exactly one component, and we report a **paired McNemar test** so
-you can tell a real effect from noise.
+**What we found**, on 200 yes/no/maybe questions about medical research papers:
 
-![Benchmark pipeline: ingestion, shared ChunkStore, and the 4-arm ablation](assets/architecture.svg)
+- **Giving the AI the whole paper summary instead of one fragment raised
+  accuracy from 37% to 59.5%.** The graph makes this possible: it finds the
+  best-matching fragment, then follows a link back to the full abstract it came
+  from. This gain is statistically significant (p < 0.0001).
+- **Pulling in other papers on related topics did not help.** It slightly
+  lowered accuracy and made answers about five times slower.
 
-*The benchmark pipeline (ArangoDB + Ollama). The hosted demo is a separate
-deployment on Neo4j — see [Hosted agent](#hosted-agent).*
+So the graph helps by *deepening* context (more of the right document), not by
+*broadening* it (more documents). We expected the opposite, and report what the
+data showed.
+
+The project has two parts: the **experiment** (a reproducible benchmark with
+tests and statistics) and a **live chat demo** you can try in your browser.
 
 ---
 
-## Hosted agent
+## 📊 Results
 
-**[▶ graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)** —
-a live chat agent (Next.js + FastAPI) built on the `graph` arm's
-parent-expansion mechanism that you can actually ask questions to, with a reasoning-path
-visualization of the graph traversal behind each answer. Backend is
-[`backend/`](backend/) on Render; frontend is [`frontend/`](frontend/) on
-Vercel. See [`backend/README.md`](backend/README.md) and
-[`frontend/README.md`](frontend/README.md) for setup and deployment.
+Each row adds exactly one technique to the row above it, on the same 200
+questions, so each jump in accuracy can be credited to one change.
 
-The backend free-tier instance sleeps after ~15 min idle -- the first request
-after a gap can take 60-120s to wake up and answer; a keep-warm cron
-([`.github/workflows/keep-warm.yml`](.github/workflows/keep-warm.yml)) exists
-but is currently disabled by GitHub for inactivity, so expect cold starts.
+| Setup | What it adds | Accuracy | Macro F1 | Avg. time per answer |
+| --- | --- | --- | --- | --- |
+| `plain` | Basic RAG: look up the 3 closest text fragments | 30.0% | 29.7% | 6.4 s |
+| `plain_rr` | + a second model re-ranks the fragments for relevance | 37.0% | 35.2% | 6.6 s |
+| **`graph`** | **+ follow the graph to each fragment's full abstract** | **59.5%** | **50.5%** | 7.5 s |
+| `graph_concepts` | + also pull in papers sharing medical topics | 57.5% | 50.0% | 40.8 s |
 
-**Scope limit:** the hosted demo's graph (`graph_id="demo"`) runs on Neo4j
-AuraDB Free, seeded with only the PubMedQA **labeled split (1,000 papers)**
-via [`scripts/ingest_neo4j.py`](scripts/ingest_neo4j.py) -- not the full
-~62k-paper corpus the benchmark above was run over. That's a deliberate,
-documented tradeoff to keep the hosted demo on a genuinely free-forever tier;
-it doesn't affect the numbers in [RESULTS.md](RESULTS.md), which come from
-the untouched ArangoDB-based benchmark pipeline. It also runs **without the
-cross-encoder reranker** (`KGQA_SKIP_RERANKER=true`, to fit Render's 512MB),
-i.e. the `graph_norr` configuration — not the benchmarked `graph` row. A
-`graph_norr` arm now exists in the benchmark but has **not been run yet**, so
-the demo's accuracy is unmeasured; treat it as a qualitative illustration.
+Is each jump real, or luck? A paired significance test (McNemar) on the same
+200 questions answers that:
 
-### Use it as an agent (MCP)
+| Change | Accuracy change | Questions fixed / broken | p-value | Significant? |
+| --- | --- | --- | --- | --- |
+| Adding the re-ranker (`plain → plain_rr`) | +7.0 pp | 35 / 21 | 0.081 | no |
+| Adding full abstracts (`plain_rr → graph`) | **+22.5 pp** | 71 / 26 | **<0.0001** | **yes** |
+| Adding related papers (`graph → graph_concepts`) | −2.0 pp | 26 / 30 | 0.69 | no |
 
-Point any MCP client at the hosted `/mcp` endpoint and it can use this agent
-as a tool -- no cloning, no API key. It exposes one tool,
-`ask_pubmed_graphrag(question, use_concepts=False)`.
+![Accuracy of the four setups on PubMedQA](results/ablation.png)
+
+### What this tells us
+
+1. **Full-document context is the decisive win** (+22.5 percentage points, for
+   about one extra second per answer). A single ~250-character fragment rarely
+   holds enough information to judge a research question; the full abstract does.
+2. **The re-ranker helps a little, but not conclusively** at this sample size
+   (+7 points, p = 0.08).
+3. **Related papers act as distractors here** (−2 points, 5× slower). Each
+   question is about one specific paper, so other papers add noise.
+
+### Honest limits
+
+- **Absolute accuracy is modest.** Always answering "yes" would score 56.5% on
+  this sample, and only the graph setups clear that, narrowly. The meaningful
+  result is the *paired comparison* between setups, not the raw accuracy.
+- **One caveat on the published run.** Evidence suggests the graph used for the
+  published numbers contained duplicated links, so full abstracts were likely
+  shown to the model with each section repeated. No information was added and
+  no answers leaked, but the result should be confirmed with a re-run. The
+  ingestion bug is fixed.
+- **The raw per-question outputs were not saved**, so the tables above cannot
+  be regenerated from this repo alone without re-running the benchmark.
+
+Full numbers, method notes, and caveats are in **[RESULTS.md](RESULTS.md)**;
+known weaknesses are tracked openly in **[GAPS.md](GAPS.md)**.
+
+---
+
+## ▶ Try it
+
+**[Live chat demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask a
+biomedical question and get an answer grounded in PubMed abstracts, with links
+to the source papers and a diagram of the graph path behind the answer.
+
+![GraphRAG chat interface](assets/chat.png)
+
+Good to know before you click:
+
+- **The first answer can take 1–2 minutes.** The backend runs on a free hosting
+  tier that sleeps when idle. Later answers are fast.
+- **The demo is a smaller version of the experiment.** It searches 1,000 papers
+  (the benchmark used about 62,000) and skips the re-ranker to fit the free
+  tier's memory. That exact configuration has not been benchmarked yet, so treat
+  the demo as an illustration rather than a measured result.
+
+**[Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** —
+interactive charts of the numbers above. No login or setup.
+
+[![Results dashboard](assets/dashboard.png)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
+
+### Use it from an AI assistant (MCP)
+
+The demo is also available as a tool for AI assistants that support the
+[Model Context Protocol](https://modelcontextprotocol.io), with no cloning or
+API key needed. It exposes one tool, `ask_pubmed_graphrag(question, use_concepts=False)`.
 
 ```bash
 claude mcp add --transport http graphrag-pubmedqa https://graphrag-agent-api.onrender.com/mcp
 ```
 
-Claude Desktop / Cursor and other MCP clients work the same way over
-streamable HTTP -- see [`backend/README.md`](backend/README.md#use-it-as-an-agent-mcp)
-for their config format and the cold-start caveats (same free-tier sleep as
-the chat demo above).
+Other MCP clients (Claude Desktop, Cursor) work the same way; see
+[`backend/README.md`](backend/README.md#use-it-as-an-agent-mcp).
 
 ---
 
-## Why the original comparison was unfair (and what changed)
+## 🔬 How the experiment works
 
-This started from a working but confounded notebook comparison. The audit found
-six issues; all are fixed in this revamp:
+The four setups form a ladder. Every setup uses the same documents, the same
+way of splitting them into fragments, the same search model, the same prompt,
+the same language model, and the same 200 randomly chosen questions. The only
+thing that changes is how much of the graph the retrieval step uses.
 
-| # | Flaw (before) | Fix (now) |
+```
+plain ─────► plain_rr ─────► graph ─────────► graph_concepts
+basic RAG    + re-ranker     + full abstract   + related papers
+                             via the graph     via shared topics
+```
+
+![Benchmark pipeline: ingestion, shared chunk store, and the four setups](assets/architecture.svg)
+
+A few terms used throughout the repo:
+
+| Term | Meaning |
+| --- | --- |
+| **PubMedQA** | A public dataset of research questions answerable with yes / no / maybe from a paper's abstract |
+| **Chunk** | One section of an abstract; the unit that search retrieves |
+| **Arm** | One of the setups being compared (`plain`, `plain_rr`, `graph`, `graph_concepts`) |
+| **Ablation** | An experiment that adds or removes one component at a time to measure its effect |
+| **Parent expansion** | Following the graph from a retrieved chunk to its full parent abstract |
+| **Concept hop** | Following shared medical subject tags (MeSH terms) to related papers |
+| **McNemar test** | A statistical test for whether two systems differ on the *same* set of questions |
+
+### Why earlier comparisons were unfair, and what changed
+
+This project began as a notebook comparison that turned out to be biased toward
+the graph. An audit found six problems, all fixed here:
+
+| # | Problem in the original | Fix |
 | --- | --- | --- |
-| 1 | GraphRAG had a cross-encoder reranker; PlainRAG was raw FAISS top-3 | The reranker is its **own arm** (`plain_rr`). The graph arms build *on top of* `plain_rr`, so the rerank is controlled for, not a hidden advantage |
-| 2 | The two pipelines indexed **different corpora** | All arms search one shared `ChunkStore` (labeled + unlabeled, identical chunks) |
-| 3 | Different granularity (whole abstracts vs per-section chunks) | Identical per-section chunking for every arm |
-| 4 | **Label leakage**: papers stored `title = question` and `final_decision`, injected into the prompt as `=== STUDY: {title} ===` | Ingestion stores **no** question-derived title and **no** `final_decision`; graph context uses generic `=== STUDY n ===` labels with abstracts only. A unit test asserts the question never appears in the context |
-| 5 | `Concepts` (MeSH) and `MENTIONS` edges were built but **never used** | The `graph_concepts` arm hops across shared MeSH concepts to pull in related papers |
-| 6 | `NameError` in the graph fallback; first-100 samples, no seed, no significance test | Fixed fallback; seeded random sample (default n=200); paired McNemar test |
-
-**What we expected vs. what we found.** Going in, we expected concept-hop
-expansion to be where the graph shines and a plain parent-expansion gain to be
-modest. The data said the opposite: the decisive, statistically significant win
-came from **parent-document expansion**, while concept-hop did not help on this
-single-abstract dataset. We report that honestly rather than bury it — see
-[Results](#results).
+| 1 | Only the graph pipeline had a re-ranker | The re-ranker is its own step (`plain_rr`), and the graph setups build on top of it |
+| 2 | The two pipelines searched different document collections | All setups search one shared collection |
+| 3 | One used whole abstracts, the other small sections | Identical per-section chunks for every setup |
+| 4 | **Answer leakage:** papers were stored with the question as their title and with the correct answer attached, and both reached the prompt | Nothing derived from the question or answer is stored; context is labeled generically (`=== STUDY n ===`). A unit test enforces this |
+| 5 | Topic links were built but never used | The `graph_concepts` setup uses them |
+| 6 | A crash in the fallback path; first-100 questions, no random seed, no significance test | Fixed fallback; seeded random sample of 200; paired McNemar test |
 
 ---
+
+## 🚀 Run it yourself
+
+**Just want to explore the code and tests?** No database, GPU, or language
+model is needed:
+
+```bash
+pip install -r requirements-dev.txt
+make test        # 150+ tests, CPU only, no external services
+make dashboard   # results dashboard at localhost (pip install -r app/requirements.txt)
+```
+
+**Want to re-run the benchmark?** You need a graph database (ArangoDB) and a
+local language model server (Ollama), ideally with a GPU.
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env                    # then set ARANGO_PASS (and ARANGO_HOST if remote)
+
+docker compose up -d                    # local ArangoDB at localhost:8529
+ollama serve & ollama pull deepseek-r1:8b
+
+python scripts/ingest.py                # build the graph (once)
+make benchmark                          # run every setup on 200 questions
+python scripts/compare.py               # tables, significance tests, figure -> results/
+```
+
+No GPU? Use Google Colab: run
+[`01_ingest.ipynb`](notebooks/01_ingest.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/01_ingest.ipynb)
+once, then
+[`02_benchmark.ipynb`](notebooks/02_benchmark.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/02_benchmark.ipynb)
+(set `ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets). An interrupted run can be
+continued with `--resume`.
+
+All settings come from environment variables (see [`.env.example`](.env.example));
+nothing is hardcoded. A fifth setup, `graph_norr` (full abstracts without the
+re-ranker, matching the live demo), is included in `make benchmark` but has no
+published results yet. The published run used `LLM_NUM_CTX=8192`, which
+`make benchmark` sets for you.
+
+To run the chat demo's backend and frontend locally, see
+[`backend/README.md`](backend/README.md) and [`frontend/README.md`](frontend/README.md).
+
+---
+
+## 🧰 Tech stack
+
+| Layer | Technology |
+| --- | --- |
+| Dataset | PubMedQA (1,000 labeled questions for evaluation; ~61,000 unlabeled papers as the search corpus) |
+| Search model (embeddings) | `all-MiniLM-L6-v2` |
+| Re-ranker | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| Language model | `deepseek-r1:8b` via [Ollama](https://ollama.com) (benchmark); Gemini (live demo) |
+| Graph database | ArangoDB (benchmark); Neo4j AuraDB (live demo) |
+| Backend | FastAPI on Render, with REST and MCP endpoints |
+| Frontend | Next.js on Vercel |
+| Dashboards | Streamlit (results), Gradio (local chat) |
+| Quality | pytest, ruff, GitHub Actions CI, Codecov |
 
 ## 🗂️ Repository layout
 
 ```
-src/kgqa/                 importable package — single source of truth
-  config.py               all shared constants (models, top-k, seed, n)
-  prompts.py              benchmark/chat prompts (identical across arms)
-  llm.py                  Ollama client (benchmark path)
-  providers.py            multi-provider LLM chain (hosted path: Gemini + Ollama fallback)
-  data.py                 seeded sampling + canonical chunking
-  evaluation.py           answer extraction, metrics, McNemar test
-  models.py               encoder (torch + ONNX) / reranker / ArangoDB + Neo4j connectors
-  service.py              graphrag.answer() -- the hosted agent's one entry point
-  retrieval/
-    base.py               ChunkStore + BaseRetriever (encode→rerank→select)
-    plain.py              plain, plain_rr arms
-    graph.py              graph, graph_concepts arms (ArangoDB backend)
-    neo4j_graph.py         same arms, Neo4j backend (hosted demo graph)
-src/graphrag/             thin re-export of kgqa.service.answer for backend/
-scripts/
-  ingest.py               build the leakage-free graph in ArangoDB (run once)
-  ingest_neo4j.py         seed the hosted demo's Neo4j graph (run once)
-  run_benchmark.py        run one arm: --arm {plain,plain_rr,graph,graph_concepts,graph_norr}
-  compare.py              summary table + McNemar + ablation figure
-  verify_onnx_parity.py   proves the ONNX and torch encoders agree
-notebooks/
-  01_ingest.ipynb         thin Colab wrapper for ingestion
-  02_benchmark.ipynb      thin Colab wrapper for all arms + comparison
-backend/                  FastAPI hosted agent (Render) -- REST + MCP endpoint
-frontend/                 Next.js chat UI + reasoning-path viz (Vercel)
-app/                      Gradio chat demo + Streamlit results dashboard
-tests/, backend/test_*.py pytest suite (runs on CPU, no Ollama/ArangoDB/Neo4j needed)
-docs/                     project report (PDF), slides (PPTX), GitHub Pages site
+src/kgqa/                 core Python package
+  config.py               every shared setting (models, sample size, seed)
+  retrieval/              the retrieval strategies being compared
+  evaluation.py           answer scoring, metrics, significance test
+  service.py              answer() — the live demo's single entry point
+  providers.py, llm.py    language-model clients
+scripts/                  ingest the data, run the benchmark, compare results
+notebooks/                Google Colab wrappers for the scripts
+backend/                  FastAPI service behind the live demo (REST + MCP)
+frontend/                 Next.js chat interface and benchmark pages
+app/                      Streamlit results dashboard, Gradio chat
+tests/                    test suite (no database or GPU needed)
+results/                  published numbers and figure
+docs/                     project report (PDF), slides, project site
 ```
 
-## 🧰 Stack
-
-- **Dataset:** PubMedQA (`pqa_labeled` for evaluation, `pqa_unlabeled` for corpus)
-- **Embeddings:** `all-MiniLM-L6-v2` (384-dim)
-- **Reranker:** `cross-encoder/ms-marco-MiniLM-L-6-v2`
-- **Graph DB:** ArangoDB — any instance (local Docker or [ArangoDB Oasis](https://cloud.arangodb.com)); schema: Papers / Chunks / Concepts; HAS_CONTEXT / MENTIONS
-- **LLM:** `deepseek-r1:8b` via [Ollama](https://ollama.com)
-
----
-
-## Setup
-
-```bash
-pip install -r requirements.txt        # add -r requirements-dev.txt for tests
-cp .env.example .env                    # then set ARANGO_PASS (and ARANGO_HOST if remote)
-```
-
-All connection settings are read from the environment (or a local `.env`, or
-Colab Secrets) — `ARANGO_HOST`, `ARANGO_USER`, `ARANGO_PASS`, `ARANGO_DB`.
-**Nothing is hardcoded**; the default host is `http://localhost:8529`.
-
-You need two services: an **ArangoDB** instance and a running **Ollama**.
-
-```bash
-# ArangoDB — option A: local, via the bundled compose file
-docker compose up -d                    # ArangoDB at localhost:8529 (root / devpassword)
-export ARANGO_PASS=devpassword          # PowerShell: $env:ARANGO_PASS="devpassword"
-
-# ArangoDB — option B: a cloud deployment (e.g. ArangoDB Oasis free tier)
-# export ARANGO_HOST=https://<your-deployment>.arangodb.cloud:8529
-# export ARANGO_PASS=<your-password>
-
-# Ollama (LLM)
-ollama serve & ollama pull deepseek-r1:8b
-```
-
-## ⚙️ Running the benchmark
-
-```bash
-python scripts/ingest.py                              # build the graph once
-make benchmark                                        # all arms incl. graph_norr (n=200)
-#   or run arms individually:
-#   python scripts/run_benchmark.py --arm plain --n 200   (plain_rr / graph / graph_concepts / graph_norr)
-python scripts/compare.py                             # table + McNemar + figure -> results/
-```
-
-The benchmark is LLM-bound and benefits from a GPU. If you don't have one,
-**Google Colab** works well: run
-[`notebooks/01_ingest.ipynb`](notebooks/01_ingest.ipynb)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/01_ingest.ipynb)
-once, then
-[`notebooks/02_benchmark.ipynb`](notebooks/02_benchmark.ipynb)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/vardhjain/graphrag-pubmedqa-ablation/blob/main/notebooks/02_benchmark.ipynb)
-(set `ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets).
-
-`graph_norr` (parent expansion *without* the reranker — the hosted demo's
-configuration) is wired into `make benchmark` and notebook 02, but has **no
-published results yet**. The published run used `LLM_NUM_CTX=8192` (what
-`make benchmark` exports and the notebook sets); the config default is 4096.
-
----
-
-## ▶ Live demo
-
-**[▶ graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)** —
-the hosted chat agent described above: ask a biomedical question, get an
-answer grounded in retrieved PubMed abstracts with the graph traversal behind
-it visualized. This is the interactive demo; see [Hosted agent](#hosted-agent)
-for how it's built and deployed.
-
-![GraphRAG chat interface](assets/chat.png)
-
-**[📊 Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** — a
-separate, static Streamlit dashboard of the 4-arm ablation itself: headline
-accuracy, the paired McNemar significance tests, latency, and (when raw
-results are present) per-class confusion matrices. No setup, no login — it
-reads the committed `results/` artifacts, so it needs no LLM, database, or
-GPU.
-
-[![Results dashboard](assets/dashboard.png)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
-
-Run the dashboard locally:
-
-```bash
-pip install -r app/requirements.txt
-make dashboard            # or: streamlit run app/dashboard.py
-```
-
-There's also a standalone Gradio chat script ([app/chat_app.py](app/chat_app.py))
-that talks directly to the benchmarked ArangoDB pipeline rather than the
-hosted Neo4j demo agent above -- useful for querying the full ~62k-paper
-corpus, but needs a reachable ArangoDB + Ollama, so run it yourself (best on
-a GPU Colab):
-
-```bash
-pip install -r requirements-app.txt
-python app/chat_app.py --share        # public Gradio link
-```
-
-See [app/README.md](app/README.md) for details.
-
----
-
-## Results
-
-Seeded random sample of **n = 200** PubMedQA `pqa_labeled` questions (seed 42,
-identical across arms), `deepseek-r1:8b` via Ollama on an A100. `scripts/compare.py`
-regenerates `results/summary.{json,md}` and `results/ablation.png`, but it needs the
-per-arm `results/{arm}_results.json` files from a benchmark run, which are **not
-committed** — so the numbers below cannot be regenerated from the repo alone.
-Canonical numbers (and the honest write-up, including a **caveat about duplicated
-graph edges in the published run**) live in [RESULTS.md](RESULTS.md).
-
-| Arm | Accuracy | Macro F1 | Avg latency | Adds |
-| --- | --- | --- | --- | --- |
-| `plain` | 30.0% | 29.7% | 6.4 s | baseline chunk RAG |
-| `plain_rr` | 37.0% | 35.2% | 6.6 s | + cross-encoder reranker |
-| **`graph`** | **59.5%** | **50.5%** | 7.5 s | + parent-paper expansion |
-| `graph_concepts` | 57.5% | 50.0% | 40.8 s | + MeSH concept hop |
-
-**Paired McNemar tests** — each contrast isolates one component on the same 200 questions:
-
-| Contrast | Δ accuracy | gains / losses | p | significant? |
-| --- | --- | --- | --- | --- |
-| `plain → plain_rr` (reranker) | +7.0 pp | 35 / 21 | 0.081 | no |
-| `plain_rr → graph` (parent expansion) | **+22.5 pp** | 71 / 26 | **<0.0001** | **yes** |
-| `graph → graph_concepts` (concept hop) | −2.0 pp | 26 / 30 | 0.69 | no |
-
-![4-arm ablation on PubMedQA](results/ablation.png)
-
-### What the ablation shows
-
-1. **The graph's decisive win is parent-document expansion** (+22.5 pp,
-   p < 0.0001). Retrieving at the fine-grained chunk level but feeding the LLM the
-   *full reconstructed abstract* (chunk → paper → all sections, via `HAS_CONTEXT`)
-   is what moves the needle — for only ~1 s over `plain_rr`. With the label
-   leakage fixed, this is a clean, legitimate graph advantage.
-2. **Single-fragment retrieval is not enough for PubMedQA.** `plain` and
-   `plain_rr` land well *below* the majority-class baseline: always answering
-   "yes" scores **56.5%** on this seeded sample (113 yes / 68 no / 19 maybe). A
-   lone ~250-character section rarely contains enough to judge the question.
-   Both graph arms clear that baseline only narrowly (`graph` by +3.0 pp; its
-   Wilson 95% CI of 52.6–66.1% overlaps it), so the absolute accuracy is not
-   the headline — the meaningful result is the **paired contrast against
-   `plain_rr`** on the same questions.
-3. **The reranker helps modestly but not significantly** at this sample size
-   (+7 pp, p = 0.08).
-4. **Concept-hop expansion does not help here** (−2 pp, p = 0.69) and costs ~5×
-   the latency. An honest — and expected — negative result: on single-abstract QA,
-   papers pulled in via shared MeSH terms act mostly as distractors. The graph
-   helps by *deepening* context (the full document), not by *broadening* it
-   (related documents).
-
-The macro-F1 / accuracy gap on the graph arms reflects weak recall on the rare
-`maybe` class (~11% of the data) — a dataset property, not a retrieval one.
-
----
+For a guided tour of the architecture and design decisions, see
+**[PROJECT.md](PROJECT.md)**.
 
 ## 🧪 Development
 
 ```bash
-make install-dev    # deps for tests + lint
-make test           # pytest — 100+ tests, all CPU, no external services
+make install-dev    # dependencies for tests and linting
+make test           # run the test suite
 make lint           # ruff
-make help           # all shortcuts (ingest, benchmark, compare, ...)
+make help           # every shortcut
 ```
 
-CI runs ruff + pytest on pushes to `main` and every PR (Python 3.10–3.13), plus a
-frontend lint/typecheck/build job. Unit tests inject fakes for the encoder,
-reranker, ArangoDB, and Neo4j, so the heavy ML dependencies are
-never needed just to verify the logic. Optionally `pre-commit install` to run
-ruff automatically on each commit.
+CI runs linting and tests on Python 3.10–3.13 for every push to `main` and every
+pull request, plus a lint, type-check, and build of the frontend. Tests use
+stand-ins for the database and models, so they run anywhere in seconds.
+Optionally run `pre-commit install` to lint and scan for secrets on each commit.
 
 ## 📖 Documentation
 
-- **[Project site](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)** — the story and results at a glance (GitHub Pages)
-- **[Project report (PDF)](docs/Project_Report.pdf)** and **[slides](docs/Graph_RAG_PPT.pptx)**
-- **[Architecture diagram](assets/architecture.svg)** · **[CHANGELOG](CHANGELOG.md)** · **[CONTRIBUTING](CONTRIBUTING.md)**
+- **[RESULTS.md](RESULTS.md)** — full results, method, and caveats
+- **[PROJECT.md](PROJECT.md)** — architecture and design rationale
+- **[GAPS.md](GAPS.md)** — known limitations, tracked openly
+- **[Project site](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)** · **[Report (PDF)](docs/Project_Report.pdf)** · **[Slides](docs/Graph_RAG_PPT.pptx)** · **[Changelog](CHANGELOG.md)**
 
 ## 🤝 Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the
-project layout, and the fairness ground rules. Changes are tracked in
-[CHANGELOG.md](CHANGELOG.md); please be kind and follow the
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and
+the fairness ground rules, and please follow the
 [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## 📚 Citing
 
-If this project or its findings are useful in your work, please cite it — see
-[CITATION.cff](CITATION.cff) (GitHub renders a "Cite this repository" button).
+If this project is useful in your work, please cite it using
+[CITATION.cff](CITATION.cff) (GitHub shows a "Cite this repository" button).
 
 ## 📄 License
 
-[MIT](LICENSE).
+[MIT](LICENSE)

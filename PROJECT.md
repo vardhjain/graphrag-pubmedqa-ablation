@@ -40,8 +40,7 @@ The audience is twofold:
 This started life as a *confounded* notebook comparison (GraphRAG secretly also
 got a reranker, a different corpus, and — worst — the answer leaked into its
 prompt). The whole repo is the fixed, fair version. See the "Why the original was
-unfair" table in [README.md](README.md) and the audit in
-[KGQA_session_export.md](KGQA_session_export.md).
+unfair" table in [README.md](README.md).
 
 ---
 

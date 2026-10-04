@@ -109,4 +109,4 @@ inference, not a measurement. The fifth `graph_norr` arm that closes this
 gap now exists but has not been run; until it is, treat the hosted demo as a *qualitative* illustration of parent
 expansion, not a live instance of the `graph` row above.
 
-Full methodology and the 4-arm ablation diagram: [README.md](README.md#results).
+Full methodology and the 4-arm ablation diagram: [README.md](README.md#-how-the-experiment-works).

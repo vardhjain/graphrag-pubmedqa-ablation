@@ -36,7 +36,7 @@ streamlit run app/dashboard.py
 This dashboard is the project's **results dashboard** -- a static view of the
 committed benchmark artifacts, separate from the interactive chat agent
 hosted at [graphrag-pubmedqa-ablation.vercel.app](https://graphrag-pubmedqa-ablation.vercel.app)
-(see the root README's [Hosted agent](../README.md#hosted-agent) section).
+(see the root README's [Try it](../README.md#-try-it) section).
 `app/requirements.txt` sits next to the entrypoint so Streamlit Cloud installs
 only the light deps (it searches the entrypoint's directory before the heavy
 root `requirements.txt`).

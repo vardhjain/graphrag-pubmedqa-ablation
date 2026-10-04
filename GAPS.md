@@ -126,7 +126,7 @@ including the worst one:
   step.
 
 All fixed and verified: no non-binary file outside historical records
-(`KGQA_session_export.md`, `docs/Project_Report.pdf`) still references the old
+(`docs/Project_Report.pdf`) still references the old
 slug. The lesson worth keeping: "I fixed the slug" is not verifiable by
 spot-check — `git remote -v` and `pyproject.toml` being clean says nothing
 about notebooks, citation metadata, or shell snippets in docs.
