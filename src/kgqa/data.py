@@ -44,11 +44,13 @@ def load_benchmark_samples(n: int = BENCHMARK_N, seed: int = RANDOM_SEED) -> lis
         decision = item.get("final_decision")
         if not item.get("question") or not decision:
             continue
-        samples.append(BenchmarkSample(
-            pubid=str(item["pubid"]),
-            question=item["question"],
-            final_decision=decision,
-        ))
+        samples.append(
+            BenchmarkSample(
+                pubid=str(item["pubid"]),
+                question=item["question"],
+                final_decision=decision,
+            )
+        )
         if len(samples) >= n:
             break
     return samples

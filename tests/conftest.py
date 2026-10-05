@@ -20,8 +20,14 @@ class FakeEncoder:
 
     dim = 16
 
-    def encode(self, texts, normalize_embeddings=False, convert_to_numpy=True,
-               batch_size=32, show_progress_bar=False):
+    def encode(
+        self,
+        texts,
+        normalize_embeddings=False,
+        convert_to_numpy=True,
+        batch_size=32,
+        show_progress_bar=False,
+    ):
         single = isinstance(texts, str)
         items = [texts] if single else list(texts)
         vecs = np.zeros((len(items), self.dim), dtype=np.float32)
@@ -104,8 +110,9 @@ class FakeNeo4jSession:
         if "HAS_CONTEXT]-(paper:Paper)" in query:
             self.driver.parent_queries.append(query)
             return [
-                FakeNeo4jRecord(paper=(pkey := ckey.rsplit("_", 1)[0]),
-                                texts=[self.driver.abstracts[pkey]])
+                FakeNeo4jRecord(
+                    paper=(pkey := ckey.rsplit("_", 1)[0]), texts=[self.driver.abstracts[pkey]]
+                )
                 for ckey in params["keys"]
             ]
         # Concept hop: return configured neighbours for the seed papers.

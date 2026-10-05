@@ -7,7 +7,7 @@
 
   <rect x="0" y="0" width="900" height="560" rx="14" fill="#ffffff" stroke="#e2e8f0" stroke-width="1.5"/>
 
-  <text x="40" y="40" font-size="22" font-weight="700" fill="#0f172a">Knowledge Graph QA — fair 4-arm ablation</text>
+  <text x="40" y="40" font-size="22" font-weight="700" fill="#0f172a">Knowledge Graph QA — benchmark pipeline and live demo</text>
   <text x="40" y="64" font-size="13" fill="#64748b">Every layer is held constant; only the retrieval strategy changes.</text>
 
   <!-- Shared backbone -->
@@ -47,6 +47,33 @@
     <line x1="170" y1="484" x2="170" y2="506"/>
   </g>
 
+  <!-- Live demo panel (separate deployment) -->
+  <rect x="360" y="88" width="500" height="140" rx="12" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+  <text x="384" y="116" font-size="14" font-weight="700" fill="#0f172a">Live demo (separate deployment, same retrieval code)</text>
+  <g text-anchor="middle" font-size="12" fill="#1e293b">
+    <rect x="384" y="134" width="100" height="46" rx="8" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5"/>
+    <text x="434" y="154" font-weight="600">Next.js chat</text>
+    <text x="434" y="170" font-size="10.5" fill="#64748b">Vercel</text>
+
+    <rect x="506" y="134" width="100" height="46" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="556" y="154" font-weight="600">FastAPI</text>
+    <text x="556" y="170" font-size="10.5" fill="#64748b">Render · REST/MCP</text>
+
+    <rect x="628" y="134" width="100" height="46" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="678" y="154" font-weight="600">Neo4j AuraDB</text>
+    <text x="678" y="170" font-size="10.5" fill="#64748b">1,000 papers</text>
+
+    <rect x="750" y="134" width="92" height="46" rx="8" fill="#f1f5f9" stroke="#94a3b8" stroke-width="1.5"/>
+    <text x="796" y="154" font-weight="600">Gemini</text>
+    <text x="796" y="170" font-size="10.5" fill="#64748b">writes answer</text>
+  </g>
+  <g stroke="#94a3b8" stroke-width="1.6" marker-end="url(#arrow)">
+    <line x1="484" y1="157" x2="504" y2="157"/>
+    <line x1="606" y1="157" x2="626" y2="157"/>
+    <line x1="728" y1="157" x2="748" y2="157"/>
+  </g>
+  <text x="384" y="208" font-size="11.5" fill="#64748b">Parent expansion, no reranker · an illustration, not a benchmarked result</text>
+
   <!-- Connector to arms panel -->
   <path d="M300,392 C330,392 330,300 360,300" fill="none" stroke="#f59e0b" stroke-width="1.6" marker-end="url(#arrow)"/>
 
@@ -59,19 +86,19 @@
 
   <g font-size="13">
     <text x="384" y="318" font-weight="700" fill="#2563eb">plain</text>
-    <text x="470" y="318" fill="#475569">raw top-k chunks</text>
+    <text x="500" y="318" fill="#475569">raw top-k chunks</text>
     <text x="836" y="318" text-anchor="end" font-weight="700" fill="#64748b">30.0%</text>
 
     <text x="384" y="345" font-weight="700" fill="#2563eb">plain_rr</text>
-    <text x="470" y="345" fill="#475569">+ cross-encoder reranker</text>
+    <text x="500" y="345" fill="#475569">+ cross-encoder reranker</text>
     <text x="836" y="345" text-anchor="end" font-weight="700" fill="#64748b">37.0%</text>
 
     <text x="384" y="378" font-weight="700" fill="#047857">graph ★</text>
-    <text x="470" y="378" fill="#475569">+ parent abstracts (HAS_CONTEXT)</text>
+    <text x="500" y="378" fill="#475569">+ parent abstracts (HAS_CONTEXT)</text>
     <text x="836" y="378" text-anchor="end" font-weight="800" fill="#047857">59.5%</text>
 
     <text x="384" y="411" font-weight="700" fill="#2563eb">graph_concepts</text>
-    <text x="470" y="411" fill="#475569">+ concept hop (MENTIONS)</text>
+    <text x="500" y="411" fill="#475569">+ concept hop (MENTIONS)</text>
     <text x="836" y="411" text-anchor="end" font-weight="700" fill="#64748b">57.5%</text>
   </g>
 

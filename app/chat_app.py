@@ -40,13 +40,15 @@ def build_retriever(use_concepts: bool):
     cache = os.path.join(ROOT, "pubmed_vectors_cache.pkl")
     store = ChunkStore.from_arango(db, cache_file=cache)
     print(f"[demo] {len(store):,} chunks loaded")
-    return GraphRetriever(store, load_encoder(), db,
-                          reranker=load_reranker(), use_concepts=use_concepts)
+    return GraphRetriever(
+        store, load_encoder(), db, reranker=load_reranker(), use_concepts=use_concepts
+    )
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--share", action="store_true", help="create a public share link")
     parser.add_argument("--concepts", action="store_true", help="use the graph_concepts arm")
     parser.add_argument("--port", type=int, default=7860)

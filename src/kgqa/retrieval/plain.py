@@ -21,7 +21,4 @@ class PlainRetriever(BaseRetriever):
     def _build_context(self, query: str, candidates: list[Candidate]) -> str:
         if not candidates:
             return "No context available."
-        return "\n\n".join(
-            f"Abstract {i + 1}: {c.text}"
-            for i, c in enumerate(candidates)
-        )
+        return "\n\n".join(f"Abstract {i + 1}: {c.text}" for i, c in enumerate(candidates))

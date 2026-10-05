@@ -81,8 +81,10 @@ def check_runs(results: dict) -> tuple[set, list[str]]:
     for arm, r in with_meta.items():
         if r["meta"].get("complete") is False:
             excluded.add(arm)
-            warnings.append(f"{arm}: INCOMPLETE run ({r['meta'].get('n_done')}/"
-                            f"{r['meta'].get('n_requested')} done)")
+            warnings.append(
+                f"{arm}: INCOMPLETE run ({r['meta'].get('n_done')}/"
+                f"{r['meta'].get('n_requested')} done)"
+            )
     keys = [_run_key(r) for r in with_meta.values()]
     if keys:
         ref = Counter(keys).most_common(1)[0][0]
@@ -124,9 +126,9 @@ def wilson_ci(p_hat: float, n: int, z: float = 1.96) -> tuple[float, float]:
     """
     if n <= 0:
         return (0.0, 0.0)
-    denom = 1 + z ** 2 / n
-    center = (p_hat + z ** 2 / (2 * n)) / denom
-    margin = (z * ((p_hat * (1 - p_hat) / n + z ** 2 / (4 * n ** 2)) ** 0.5)) / denom
+    denom = 1 + z**2 / n
+    center = (p_hat + z**2 / (2 * n)) / denom
+    margin = (z * ((p_hat * (1 - p_hat) / n + z**2 / (4 * n**2)) ** 0.5)) / denom
     return (max(0.0, center - margin), min(1.0, center + margin))
 
 
@@ -191,8 +193,10 @@ def main():
             print(f"    - {w}")
         print("!" * 64)
 
-    lines = ["| Arm | Accuracy (95% CI) | Macro F1 | Recall@k | Avg latency (s) | n |",
-             "| --- | --- | --- | --- | --- | --- |"]
+    lines = [
+        "| Arm | Accuracy (95% CI) | Macro F1 | Recall@k | Avg latency (s) | n |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
     arms_json, max_n = [], 0
     print("\n" + "=" * 64)
     print("  RESULTS SUMMARY")
@@ -210,34 +214,53 @@ def main():
         ci_display = f"{ci_lo * 100:.1f}–{ci_hi * 100:.1f}%"
         max_n = max(max_n, n)
         failed_note = f"  failed={n_failed}" if n_failed else ""
-        print(f"  {arm:<16} acc={acc:6.2f}%  ci=[{ci_display}]  f1={f1:6.2f}%  "
-              f"recall@k={recall_display:>6}  lat={lat:5.1f}s  n={n}{failed_note}")
-        lines.append(f"| {arm} | {acc:.2f}% ({ci_display}) | {f1:.2f}% | {recall_display} "
-                     f"| {lat:.1f} | {n} |")
-        arms_json.append({"arm": arm, "accuracy": round(acc, 2),
-                          "accuracy_ci95": [round(ci_lo * 100, 2), round(ci_hi * 100, 2)],
-                          "macro_f1": round(f1, 2),
-                          "recall_at_k": round(recall_k, 4) if recall_k is not None else None,
-                          "avg_latency": round(lat, 1), "samples": n, "n_failed": n_failed,
-                          **{k: r[k] for k in ("n_degraded", "n_truncated") if k in r},
-                          **({"complete": r["meta"].get("complete")} if r.get("meta") else {}),
-                          **({"excluded_from_tests": True} if arm in excluded else {}),
-                          "adds": ARM_ADDS.get(arm, "")})
+        print(
+            f"  {arm:<16} acc={acc:6.2f}%  ci=[{ci_display}]  f1={f1:6.2f}%  "
+            f"recall@k={recall_display:>6}  lat={lat:5.1f}s  n={n}{failed_note}"
+        )
+        lines.append(
+            f"| {arm} | {acc:.2f}% ({ci_display}) | {f1:.2f}% | {recall_display} "
+            f"| {lat:.1f} | {n} |"
+        )
+        arms_json.append(
+            {
+                "arm": arm,
+                "accuracy": round(acc, 2),
+                "accuracy_ci95": [round(ci_lo * 100, 2), round(ci_hi * 100, 2)],
+                "macro_f1": round(f1, 2),
+                "recall_at_k": round(recall_k, 4) if recall_k is not None else None,
+                "avg_latency": round(lat, 1),
+                "samples": n,
+                "n_failed": n_failed,
+                **{k: r[k] for k in ("n_degraded", "n_truncated") if k in r},
+                **({"complete": r["meta"].get("complete")} if r.get("meta") else {}),
+                **({"excluded_from_tests": True} if arm in excluded else {}),
+                "adds": ARM_ADDS.get(arm, ""),
+            }
+        )
 
     print("\n" + "=" * 64)
     print("  PAIRED McNEMAR TESTS (adjacent ablation contrasts)")
     print("=" * 64)
-    lines += ["", "### Significance (paired McNemar, Holm-adjusted for multiple comparisons)", "",
-              "| Contrast | Δacc (pp) | gains | losses | p | p (Holm) | sig? |",
-              "| --- | --- | --- | --- | --- | --- | --- |"]
+    lines += [
+        "",
+        "### Significance (paired McNemar, Holm-adjusted for multiple comparisons)",
+        "",
+        "| Contrast | Δacc (pp) | gains | losses | p | p (Holm) | sig? |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
 
     # Two passes: Holm's adjustment needs every contrast's raw p-value before
     # any of them can be corrected, so compute them all first.
     raw = []
     family_p = []  # one entry per pre-declared contrast; p=1 if not computable
     for a_name, b_name, desc in CONTRASTS:
-        usable = (a_name in results and b_name in results
-                  and a_name not in excluded and b_name not in excluded)
+        usable = (
+            a_name in results
+            and b_name in results
+            and a_name not in excluded
+            and b_name not in excluded
+        )
         gt, pa, pb = aligned(results[a_name], results[b_name]) if usable else ([], [], [])
         if not gt:
             family_p.append(1.0)
@@ -247,8 +270,15 @@ def main():
         acc_a = sum(p == g for p, g in zip(pa, gt, strict=False)) / len(gt)
         acc_b = sum(p == g for p, g in zip(pb, gt, strict=False)) / len(gt)
         family_p.append(test["p_value"])
-        raw.append({"a_name": a_name, "b_name": b_name, "desc": desc,
-                   "delta_acc": (acc_b - acc_a) * 100, "test": test})
+        raw.append(
+            {
+                "a_name": a_name,
+                "b_name": b_name,
+                "desc": desc,
+                "delta_acc": (acc_b - acc_a) * 100,
+                "test": test,
+            }
+        )
 
     holm_p = holm_adjust(family_p)
 
@@ -261,24 +291,35 @@ def main():
         sig = "yes" if sig_holm else "no"
         p_display, p_holm_display = format_p(test["p_value"]), format_p(p_holm)
         print(f"  {r['a_name']} -> {r['b_name']}  ({r['desc']})")
-        print(f"      Δacc={d:+.2f}pp  gains={test['b_gains']}  losses={test['c_losses']}"
-              f"  p={p_display}  p(Holm)={p_holm_display}  sig={sig}")
-        lines.append(f"| {r['a_name']} → {r['b_name']} ({r['desc']}) | {d:+.2f} | {test['b_gains']} "
-                     f"| {test['c_losses']} | {p_display} | {p_holm_display} | {sig} |")
-        contrasts_json.append({"from": r["a_name"], "to": r["b_name"], "effect": r["desc"],
-                               "delta_acc": round(d, 2), "gains": test["b_gains"],
-                               "losses": test["c_losses"],
-                               # Full precision, not rounded to 4dp -- a real
-                               # p~5.5e-6 must not collapse to the literal 0.0.
-                               "p_value": test["p_value"],
-                               "p_display": p_display,
-                               "p_holm": p_holm,
-                               "p_holm_display": p_holm_display,
-                               # "significant" now reflects the Holm-adjusted
-                               # p-value, not the raw per-contrast one --
-                               # the more defensible number when reporting
-                               # several tests from the same benchmark run.
-                               "significant": sig_holm})
+        print(
+            f"      Δacc={d:+.2f}pp  gains={test['b_gains']}  losses={test['c_losses']}"
+            f"  p={p_display}  p(Holm)={p_holm_display}  sig={sig}"
+        )
+        lines.append(
+            f"| {r['a_name']} → {r['b_name']} ({r['desc']}) | {d:+.2f} | {test['b_gains']} "
+            f"| {test['c_losses']} | {p_display} | {p_holm_display} | {sig} |"
+        )
+        contrasts_json.append(
+            {
+                "from": r["a_name"],
+                "to": r["b_name"],
+                "effect": r["desc"],
+                "delta_acc": round(d, 2),
+                "gains": test["b_gains"],
+                "losses": test["c_losses"],
+                # Full precision, not rounded to 4dp -- a real
+                # p~5.5e-6 must not collapse to the literal 0.0.
+                "p_value": test["p_value"],
+                "p_display": p_display,
+                "p_holm": p_holm,
+                "p_holm_display": p_holm_display,
+                # "significant" now reflects the Holm-adjusted
+                # p-value, not the raw per-contrast one --
+                # the more defensible number when reporting
+                # several tests from the same benchmark run.
+                "significant": sig_holm,
+            }
+        )
 
     md_path = os.path.join(RESULTS_DIR, "summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
@@ -288,12 +329,20 @@ def main():
     seed, model = run_provenance(results, excluded)
     json_path = os.path.join(RESULTS_DIR, "summary.json")
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump({"n": max_n, "seed": seed, "model": model,
-                   "dataset": "PubMedQA (pqa_labeled)" if "PubMedQA" in DATASET_NAME
-                   else DATASET_NAME,
-                   "holm_family": [f"{a}->{b}" for a, b, _ in CONTRASTS],
-                   **({"warnings": run_warnings} if run_warnings else {}),
-                   "arms": arms_json, "contrasts": contrasts_json}, f, indent=2)
+        json.dump(
+            {
+                "n": max_n,
+                "seed": seed,
+                "model": model,
+                "dataset": "PubMedQA (pqa_labeled)" if "PubMedQA" in DATASET_NAME else DATASET_NAME,
+                "holm_family": [f"{a}->{b}" for a, b, _ in CONTRASTS],
+                **({"warnings": run_warnings} if run_warnings else {}),
+                "arms": arms_json,
+                "contrasts": contrasts_json,
+            },
+            f,
+            indent=2,
+        )
     print(f"Wrote {json_path}")
 
     _plot(results)
@@ -302,6 +351,7 @@ def main():
 def _plot(results):
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except Exception as exc:  # pragma: no cover
@@ -314,6 +364,7 @@ def _plot(results):
 
     fig, ax = plt.subplots(figsize=(9, 5))
     import numpy as np
+
     x = np.arange(len(arms))
     w = 0.38
     ax.bar(x - w / 2, accs, w, label="Accuracy", color="#2196F3")

@@ -51,8 +51,7 @@ class OnnxEncoder:
 
     dim = 384
 
-    def __init__(self, model_path: str, tokenizer_path: str,
-                 max_seq_length: int = _ONNX_MAX_SEQ):
+    def __init__(self, model_path: str, tokenizer_path: str, max_seq_length: int = _ONNX_MAX_SEQ):
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
@@ -66,32 +65,38 @@ class OnnxEncoder:
         opts.intra_op_num_threads = 1
         opts.inter_op_num_threads = 1
         self.session = ort.InferenceSession(
-            model_path, sess_options=opts, providers=["CPUExecutionProvider"])
+            model_path, sess_options=opts, providers=["CPUExecutionProvider"]
+        )
         self._input_names = {i.name for i in self.session.get_inputs()}
 
-    def encode(self, texts, normalize_embeddings=False, convert_to_numpy=True,
-               batch_size=32, show_progress_bar=False):
+    def encode(
+        self,
+        texts,
+        normalize_embeddings=False,
+        convert_to_numpy=True,
+        batch_size=32,
+        show_progress_bar=False,
+    ):
         import numpy as np
 
         single = isinstance(texts, str)
         items = [texts] if single else list(texts)
         chunks = []
         for start in range(0, len(items), batch_size):
-            encodings = self.tokenizer.encode_batch(items[start:start + batch_size])
+            encodings = self.tokenizer.encode_batch(items[start : start + batch_size])
             feeds = {
                 "input_ids": np.asarray([e.ids for e in encodings], dtype=np.int64),
-                "attention_mask": np.asarray(
-                    [e.attention_mask for e in encodings], dtype=np.int64),
+                "attention_mask": np.asarray([e.attention_mask for e in encodings], dtype=np.int64),
             }
             if "token_type_ids" in self._input_names:
                 feeds["token_type_ids"] = np.asarray(
-                    [e.type_ids for e in encodings], dtype=np.int64)
+                    [e.type_ids for e in encodings], dtype=np.int64
+                )
             hidden = self.session.run(None, feeds)[0]  # (B, L, dim) last_hidden_state
             mask = feeds["attention_mask"][..., None].astype(np.float32)
             pooled = (hidden * mask).sum(axis=1) / np.clip(mask.sum(axis=1), 1e-9, None)
             chunks.append(pooled.astype(np.float32))
-        vecs = (np.concatenate(chunks) if chunks
-                else np.zeros((0, self.dim), dtype=np.float32))
+        vecs = np.concatenate(chunks) if chunks else np.zeros((0, self.dim), dtype=np.float32)
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         vecs = vecs / norms

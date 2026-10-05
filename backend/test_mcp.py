@@ -142,11 +142,13 @@ class _session:
         from contextlib import AsyncExitStack
 
         self._stack = AsyncExitStack()
-        client = await self._stack.enter_async_context(httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://localhost",  # mcp's DNS-rebinding guard allows this Host
-            timeout=30,
-        ))
+        client = await self._stack.enter_async_context(
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://localhost",  # mcp's DNS-rebinding guard allows this Host
+                timeout=30,
+            )
+        )
         read, write, _ = await self._stack.enter_async_context(
             streamable_http_client("http://localhost/mcp", http_client=client)
         )

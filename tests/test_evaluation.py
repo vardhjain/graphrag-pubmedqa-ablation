@@ -76,8 +76,8 @@ def test_recall_at_k_is_zero_with_no_scorable_samples():
 
 def test_mcnemar_detects_one_sided_gain():
     gt = ["yes"] * 10
-    a = ["no"] * 10           # arm A always wrong
-    b = ["yes"] * 10          # arm B always right
+    a = ["no"] * 10  # arm A always wrong
+    b = ["yes"] * 10  # arm B always right
     res = mcnemar_test(gt, a, b)
     assert res["b_gains"] == 10
     assert res["c_losses"] == 0
@@ -93,12 +93,14 @@ def test_mcnemar_no_difference():
 
 def test_mcnemar_length_mismatch_raises():
     import pytest
+
     with pytest.raises(ValueError):
         mcnemar_test(["yes"], ["yes"], ["yes", "no"])
 
 
 def test_report_and_save_roundtrip(tmp_path):
     import json
+
     ev = Evaluator("graph")
     ev.record("yes", "yes", 1.0, "1")
     ev.record("no", "yes", 2.0, "2")

@@ -25,8 +25,10 @@ def test_chunkstore_search_ranks_relevant_first(fake_encoder):
 
 def test_plain_arm_naming(fake_encoder, fake_reranker):
     assert PlainRetriever(make_store(fake_encoder), fake_encoder).name == "plain"
-    assert PlainRetriever(make_store(fake_encoder), fake_encoder,
-                          reranker=fake_reranker).name == "plain_rr"
+    assert (
+        PlainRetriever(make_store(fake_encoder), fake_encoder, reranker=fake_reranker).name
+        == "plain_rr"
+    )
 
 
 def test_plain_context_is_raw_chunks(fake_encoder):
@@ -83,11 +85,13 @@ def test_public_select_matches_private_select(fake_encoder, fake_reranker):
 
 def test_graph_parent_expansion_uses_full_abstract(fake_encoder, fake_reranker):
     store = make_store(fake_encoder)
-    db = FakeDB(abstracts={
-        "1": "FULL ABSTRACT 1: aspirin trial methods results conclusion",
-        "2": "FULL ABSTRACT 2: statin trial",
-        "3": "FULL ABSTRACT 3: exercise study",
-    })
+    db = FakeDB(
+        abstracts={
+            "1": "FULL ABSTRACT 1: aspirin trial methods results conclusion",
+            "2": "FULL ABSTRACT 2: statin trial",
+            "3": "FULL ABSTRACT 3: exercise study",
+        }
+    )
     r = GraphRetriever(store, fake_encoder, db, reranker=fake_reranker, top_k_final=1)
     assert r.name == "graph"
     ctx = r.retrieve("aspirin heart attack")
@@ -101,8 +105,9 @@ def test_graph_concept_hop_adds_neighbour(fake_encoder, fake_reranker):
         abstracts={"1": "FULL ABSTRACT 1: aspirin", "2": "x", "3": "y"},
         neighbours=[("99", "NEIGHBOUR ABSTRACT via shared MeSH concept")],
     )
-    r = GraphRetriever(store, fake_encoder, db, reranker=fake_reranker,
-                       use_concepts=True, top_k_final=1)
+    r = GraphRetriever(
+        store, fake_encoder, db, reranker=fake_reranker, use_concepts=True, top_k_final=1
+    )
     assert r.name == "graph_concepts"
     ctx = r.retrieve("aspirin heart attack")
     assert "NEIGHBOUR ABSTRACT" in ctx
@@ -126,6 +131,7 @@ def test_graph_degrades_to_raw_chunks_on_db_error(fake_encoder, fake_reranker):
             @staticmethod
             def execute(*a, **k):
                 raise RuntimeError("no connection")
+
     store = make_store(fake_encoder)
     r = GraphRetriever(store, fake_encoder, BrokenDB(), reranker=fake_reranker, top_k_final=1)
     ctx = r.retrieve("aspirin heart attack")
@@ -141,14 +147,16 @@ def test_graph_degrades_to_raw_chunks_on_db_error(fake_encoder, fake_reranker):
 
 def test_chat_returns_answer_and_source_pubids(fake_encoder, fake_reranker, monkeypatch):
     import kgqa.retrieval.base as base
-    monkeypatch.setattr(base, "call_ollama",
-                        lambda *a, **k: "<think>reasoning</think> Yes, it does.")
+
+    monkeypatch.setattr(
+        base, "call_ollama", lambda *a, **k: "<think>reasoning</think> Yes, it does."
+    )
     store = make_store(fake_encoder)
     db = FakeDB(abstracts={"1": "FULL ABS 1: aspirin", "2": "x", "3": "y"})
     r = GraphRetriever(store, fake_encoder, db, reranker=fake_reranker, top_k_final=1)
     out = r.chat("does aspirin reduce heart attack risk")
     assert set(out) >= {"answer", "sources", "context"}
-    assert out["sources"] == ["1"]          # the retrieved paper's pubid
+    assert out["sources"] == ["1"]  # the retrieved paper's pubid
     assert "Yes" in out["answer"]
 
 
@@ -156,8 +164,11 @@ def test_chunkstore_from_dataset_builds_corpus(monkeypatch, fake_encoder):
     import kgqa.data as data
     from kgqa.retrieval import ChunkStore
 
-    monkeypatch.setattr(data, "iter_chunks",
-                        lambda include_unlabeled=True: iter([("1", 0, "alpha"), ("2", 0, "beta")]))
+    monkeypatch.setattr(
+        data,
+        "iter_chunks",
+        lambda include_unlabeled=True: iter([("1", 0, "alpha"), ("2", 0, "beta")]),
+    )
     store = ChunkStore.from_dataset(fake_encoder, include_unlabeled=False)
     assert len(store) == 2
     assert store.paper_keys == ["1", "2"]
@@ -289,7 +300,9 @@ def test_from_arango_cache_hit_skips_the_query_entirely(tmp_path):
     assert db.aql.execute_calls == []
 
 
-def test_answer_benchmark_returns_answer_and_retrieved_paper_keys(fake_encoder, fake_reranker, monkeypatch):
+def test_answer_benchmark_returns_answer_and_retrieved_paper_keys(
+    fake_encoder, fake_reranker, monkeypatch
+):
     """recall@k (src/kgqa/evaluation.py) needs the paper keys _select()
     retrieved, not just the LLM's answer text -- this is the contract that
     supplies them."""

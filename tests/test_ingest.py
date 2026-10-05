@@ -46,7 +46,10 @@ class _Model:
 
 
 ROWS = [
-    {"pubid": 1, "context": {"contexts": ["a", "b"], "labels": ["BG"], "meshes": ["Humans", "X-1"]}},
+    {
+        "pubid": 1,
+        "context": {"contexts": ["a", "b"], "labels": ["BG"], "meshes": ["Humans", "X-1"]},
+    },
     {"pubid": 2, "context": {"contexts": ["c"], "labels": [], "meshes": ["Humans"]}},
 ]
 

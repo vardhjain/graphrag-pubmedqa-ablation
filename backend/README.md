@@ -47,8 +47,9 @@ Two things worth knowing before you rely on it:
 - **Cold start.** Render's free tier sleeps after ~15 min idle; the first tool
   call after a gap can take 60-120s while the instance wakes up and loads the
   vector store. Follow-up calls are ~15-20s.
-- **Unauthenticated, demo-scoped.** No auth and no per-IP rate limiting (only a
-  body-size cap and a global concurrency limit) -- this is a
+- **Unauthenticated, demo-scoped.** No auth; a per-client rate limit (10 requests/min
+  on `/query`, tunable via `KGQA_RATE_LIMIT_PER_MIN`), a body-size cap, and a
+  global concurrency limit guard the instance -- this is a
   portfolio demo over the same 1,000-paper labeled-split graph described
   below, not a production API.
 

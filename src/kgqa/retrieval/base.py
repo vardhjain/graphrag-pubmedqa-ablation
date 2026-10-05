@@ -68,7 +68,8 @@ def _dump_vector_cache(cache_file: str, payload: dict) -> None:
     tmp = None
     try:
         fd, tmp = tempfile.mkstemp(
-            prefix=os.path.basename(cache_file) + ".", suffix=".tmp",
+            prefix=os.path.basename(cache_file) + ".",
+            suffix=".tmp",
             dir=os.path.dirname(os.path.abspath(cache_file)),
         )
         with os.fdopen(fd, "wb") as f:
@@ -88,13 +89,17 @@ def _dump_vector_cache(cache_file: str, payload: dict) -> None:
 class ChunkStore:
     """In-memory, L2-normalised chunk embeddings with cosine search."""
 
-    def __init__(self, ids: list[str], paper_keys: list[str],
-                 texts: list[str], embeddings: np.ndarray):
+    def __init__(
+        self, ids: list[str], paper_keys: list[str], texts: list[str], embeddings: np.ndarray
+    ):
         self.ids = ids
         self.paper_keys = paper_keys
         self.texts = texts
-        self.embeddings = _normalize(np.asarray(embeddings, dtype=np.float32)) \
-            if len(embeddings) else np.zeros((0, 0), dtype=np.float32)
+        self.embeddings = (
+            _normalize(np.asarray(embeddings, dtype=np.float32))
+            if len(embeddings)
+            else np.zeros((0, 0), dtype=np.float32)
+        )
 
     def __len__(self) -> int:
         return len(self.ids)
@@ -104,7 +109,7 @@ class ChunkStore:
         if len(self) == 0 or k <= 0:
             return []
         q = _normalize(np.atleast_2d(np.asarray(query_emb, dtype=np.float32)))
-        sims = (self.embeddings @ q[0])
+        sims = self.embeddings @ q[0]
         k = min(k, len(self))
         top = np.argpartition(sims, -k)[-k:]
         return list(top[np.argsort(sims[top])[::-1]])
@@ -114,8 +119,9 @@ class ChunkStore:
 
     # ── builders ───────────────────────────────────────────────────────────────
     @classmethod
-    def from_dataset(cls, encoder, include_unlabeled: bool = True,
-                     batch_size: int = 128) -> ChunkStore:
+    def from_dataset(
+        cls, encoder, include_unlabeled: bool = True, batch_size: int = 128
+    ) -> ChunkStore:
         """Build the corpus locally from PubMedQA (no ArangoDB needed)."""
         from ..data import iter_chunks
 
@@ -125,14 +131,18 @@ class ChunkStore:
             paper_keys.append(paper_key)
             texts.append(text)
         embeddings = encoder.encode(
-            texts, batch_size=batch_size, convert_to_numpy=True,
-            normalize_embeddings=True, show_progress_bar=True,
+            texts,
+            batch_size=batch_size,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+            show_progress_bar=True,
         )
         return cls(ids, paper_keys, texts, embeddings)
 
     @classmethod
-    def from_arango(cls, db, collection: str = "Chunks", batch: int = 5000,
-                    cache_file: str | None = None) -> ChunkStore:
+    def from_arango(
+        cls, db, collection: str = "Chunks", batch: int = 5000, cache_file: str | None = None
+    ) -> ChunkStore:
         """Download chunk vectors from ArangoDB (with optional pickle cache).
 
         Uses a single query, paged server-side via ``batch_size`` and
@@ -147,8 +157,9 @@ class ChunkStore:
         if cache_file:
             data = _load_vector_cache(cache_file)
             if data is not None and len(data["embeddings"]):
-                return cls(data["ids"], data["paper_keys"],
-                           data["texts"], np.asarray(data["embeddings"]))
+                return cls(
+                    data["ids"], data["paper_keys"], data["texts"], np.asarray(data["embeddings"])
+                )
 
         ids, paper_keys, texts, embeddings = [], [], [], []
         aql = """
@@ -157,7 +168,9 @@ class ChunkStore:
                 RETURN { id: c._id, paper: c.paper_key,
                          text: c.text, emb: c.embedding }
         """
-        cursor = db.aql.execute(aql, bind_vars={"@collection": collection}, batch_size=batch, ttl=3600)
+        cursor = db.aql.execute(
+            aql, bind_vars={"@collection": collection}, batch_size=batch, ttl=3600
+        )
         for doc in cursor:
             ids.append(doc["id"])
             paper_keys.append(doc.get("paper") or doc["id"].split("/")[-1].rsplit("_", 1)[0])
@@ -166,8 +179,10 @@ class ChunkStore:
 
         embeddings_np = np.asarray(embeddings, dtype=np.float32)
         if cache_file and ids:
-            _dump_vector_cache(cache_file, {"ids": ids, "paper_keys": paper_keys,
-                                            "texts": texts, "embeddings": embeddings_np})
+            _dump_vector_cache(
+                cache_file,
+                {"ids": ids, "paper_keys": paper_keys, "texts": texts, "embeddings": embeddings_np},
+            )
         return cls(ids, paper_keys, texts, embeddings_np)
 
     @classmethod
@@ -181,8 +196,9 @@ class ChunkStore:
         if cache_file:
             data = _load_vector_cache(cache_file)
             if data is not None and len(data["embeddings"]):
-                return cls(data["ids"], data["paper_keys"],
-                           data["texts"], np.asarray(data["embeddings"]))
+                return cls(
+                    data["ids"], data["paper_keys"], data["texts"], np.asarray(data["embeddings"])
+                )
 
         ids, paper_keys, texts, embeddings = [], [], [], []
         with driver.session() as session:
@@ -199,8 +215,10 @@ class ChunkStore:
 
         embeddings_np = np.asarray(embeddings, dtype=np.float32)
         if cache_file and ids:
-            _dump_vector_cache(cache_file, {"ids": ids, "paper_keys": paper_keys,
-                                            "texts": texts, "embeddings": embeddings_np})
+            _dump_vector_cache(
+                cache_file,
+                {"ids": ids, "paper_keys": paper_keys, "texts": texts, "embeddings": embeddings_np},
+            )
         return cls(ids, paper_keys, texts, embeddings_np)
 
 
@@ -209,9 +227,14 @@ class BaseRetriever(ABC):
 
     name: str = "base"
 
-    def __init__(self, store: ChunkStore, encoder, reranker=None,
-                 top_k_final: int = TOP_K_FINAL,
-                 top_k_candidates: int = TOP_K_CANDIDATES):
+    def __init__(
+        self,
+        store: ChunkStore,
+        encoder,
+        reranker=None,
+        top_k_final: int = TOP_K_FINAL,
+        top_k_candidates: int = TOP_K_CANDIDATES,
+    ):
         self.store = store
         self.encoder = encoder
         self.reranker = reranker
@@ -227,13 +250,17 @@ class BaseRetriever(ABC):
 
         if self.reranker and candidates:
             scores = self.reranker.predict([[query, c.text] for c in candidates])
-            order = np.argsort(scores)[::-1][:self.top_k_final]
+            order = np.argsort(scores)[::-1][: self.top_k_final]
             return [
-                Candidate(candidates[i].chunk_id, candidates[i].paper_key,
-                          candidates[i].text, float(scores[i]))
+                Candidate(
+                    candidates[i].chunk_id,
+                    candidates[i].paper_key,
+                    candidates[i].text,
+                    float(scores[i]),
+                )
                 for i in order
             ]
-        return candidates[:self.top_k_final]
+        return candidates[: self.top_k_final]
 
     def select(self, query: str) -> list[Candidate]:
         """Public entry point for callers that need the selected candidates
@@ -267,8 +294,7 @@ class BaseRetriever(ABC):
         """
         candidates = self._select(question)
         context = self._build_context(question, candidates)
-        answer = call_ollama(build_prompt(context, question),
-                             system=BENCHMARK_SYSTEM_PROMPT)
+        answer = call_ollama(build_prompt(context, question), system=BENCHMARK_SYSTEM_PROMPT)
         retrieved_papers = list(dict.fromkeys(c.paper_key for c in candidates))
         return answer, retrieved_papers
 
@@ -280,8 +306,9 @@ class BaseRetriever(ABC):
         """
         candidates = self._select(question)
         context = self._build_context(question, candidates)
-        answer = call_ollama(build_prompt(context, question),
-                             system=CHAT_SYSTEM_PROMPT, temperature=temperature)
+        answer = call_ollama(
+            build_prompt(context, question), system=CHAT_SYSTEM_PROMPT, temperature=temperature
+        )
         sources = list(dict.fromkeys(c.paper_key for c in candidates))
         return {"answer": answer, "sources": sources, "context": context}
 
@@ -340,8 +367,10 @@ class GraphExpansionMixin:
                 neighbours = self._concept_neighbours(seed_keys) if seed_keys else []
             except Exception as exc:  # keep the parent studies, drop only the hop
                 self._degraded_count = getattr(self, "_degraded_count", 0) + 1
-                print(f"[GraphRAG] {type(self).__name__} concept hop failed ({exc}). "
-                      "Keeping parent studies only.")
+                print(
+                    f"[GraphRAG] {type(self).__name__} concept hop failed ({exc}). "
+                    "Keeping parent studies only."
+                )
                 neighbours = []
             for key, abstract in neighbours:
                 if key not in seed_keys and abstract:

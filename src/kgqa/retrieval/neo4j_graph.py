@@ -62,7 +62,7 @@ ORDER BY shared DESC, paper
 
 
 def _local_key(chunk_id: str) -> str:
-    """"Chunks/12345_0" -> "12345_0" -- strip the Arango-style collection prefix
+    """ "Chunks/12345_0" -> "12345_0" -- strip the Arango-style collection prefix
     kept elsewhere in the codebase (Candidate.chunk_id, ChunkStore ids) so this
     retriever can plug into the same call sites without changing those IDs."""
     return chunk_id.split("/", 1)[-1] if "/" in chunk_id else chunk_id
@@ -71,9 +71,16 @@ def _local_key(chunk_id: str) -> str:
 class Neo4jGraphRetriever(GraphExpansionMixin, BaseRetriever):
     name = "graph"
 
-    def __init__(self, store, encoder, driver, reranker=None,
-                 use_concepts: bool = False,
-                 concept_hop_papers: int = CONCEPT_HOP_PAPERS, **kwargs):
+    def __init__(
+        self,
+        store,
+        encoder,
+        driver,
+        reranker=None,
+        use_concepts: bool = False,
+        concept_hop_papers: int = CONCEPT_HOP_PAPERS,
+        **kwargs,
+    ):
         super().__init__(store, encoder, reranker=reranker, **kwargs)
         self.driver = driver
         self.use_concepts = use_concepts
@@ -94,9 +101,13 @@ class Neo4jGraphRetriever(GraphExpansionMixin, BaseRetriever):
 
     def _concept_neighbours(self, paper_keys: list[str]) -> list[tuple[str, str]]:
         with self.driver.session() as session:
-            rows = list(session.run(
-                _CONCEPT_CYPHER, paper_keys=paper_keys, limit=self.concept_hop_papers,
-            ))
+            rows = list(
+                session.run(
+                    _CONCEPT_CYPHER,
+                    paper_keys=paper_keys,
+                    limit=self.concept_hop_papers,
+                )
+            )
         return [(row["paper"], " ".join(row["texts"])) for row in rows]
 
     # gather_studies() is inherited from GraphExpansionMixin -- same fallback

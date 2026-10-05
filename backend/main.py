@@ -25,6 +25,8 @@ import logging
 import os
 import sys
 import threading
+import time
+from collections import deque
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Annotated
 
@@ -117,6 +119,54 @@ async def _limit_body_size(request: Request, call_next):
             return JSONResponse({"detail": "Invalid Content-Length."}, status_code=400)
         if too_big:
             return JSONResponse({"detail": "Request body too large."}, status_code=413)
+    return await call_next(request)
+
+
+# Per-client request cap on the endpoints that reach the LLM. In-memory and
+# per-process on purpose: one free-tier instance, no extra dependency. Render's
+# proxy sets X-Forwarded-For; its first hop is the client. A caller can spoof
+# that header, so this stops casual abuse and runaway clients, not a determined
+# attacker -- ANSWER_LIMITER still bounds total concurrent work.
+# An MCP tool call is several POSTs (initialize, list, call), so /mcp gets a
+# proportionally higher cap. KGQA_RATE_LIMIT_PER_MIN=0 disables limiting.
+_RATE_LIMIT = int(os.environ.get("KGQA_RATE_LIMIT_PER_MIN", "10"))
+_RATE_WINDOW_SECONDS = 60.0
+_RATE_LIMITS = {"/query": _RATE_LIMIT, "/mcp": _RATE_LIMIT * 4}
+_RATE_MAX_CLIENTS = 10_000
+_rate_hits: dict[str, deque[float]] = {}
+_rate_lock = threading.Lock()
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _rate_limited(key: str, limit: int, now: float) -> bool:
+    with _rate_lock:
+        if len(_rate_hits) > _RATE_MAX_CLIENTS:
+            _rate_hits.clear()  # bound memory; worst case is one free window
+        hits = _rate_hits.setdefault(key, deque())
+        while hits and now - hits[0] > _RATE_WINDOW_SECONDS:
+            hits.popleft()
+        if len(hits) >= limit:
+            return True
+        hits.append(now)
+        return False
+
+
+@app.middleware("http")
+async def _rate_limit(request: Request, call_next):
+    path = request.url.path.rstrip("/")
+    limit = _RATE_LIMITS.get(path, 0) if request.method == "POST" else 0
+    if limit > 0 and _rate_limited(f"{_client_ip(request)}|{path}", limit, time.monotonic()):
+        return JSONResponse(
+            {"detail": "Too many requests. Please wait a minute and try again."},
+            status_code=429,
+            headers={"Retry-After": str(int(_RATE_WINDOW_SECONDS))},
+        )
     return await call_next(request)
 
 

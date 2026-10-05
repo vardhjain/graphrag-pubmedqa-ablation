@@ -81,9 +81,16 @@ _CONCEPT_AQL = """
 class GraphRetriever(GraphExpansionMixin, BaseRetriever):
     name = "graph"
 
-    def __init__(self, store, encoder, db, reranker=None,
-                 use_concepts: bool = False,
-                 concept_hop_papers: int = CONCEPT_HOP_PAPERS, **kwargs):
+    def __init__(
+        self,
+        store,
+        encoder,
+        db,
+        reranker=None,
+        use_concepts: bool = False,
+        concept_hop_papers: int = CONCEPT_HOP_PAPERS,
+        **kwargs,
+    ):
         super().__init__(store, encoder, reranker=reranker, **kwargs)
         self.db = db
         self.use_concepts = use_concepts

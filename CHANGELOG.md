@@ -7,6 +7,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Per-client rate limiting on `/query` and `/mcp` (`KGQA_RATE_LIMIT_PER_MIN`).
+- The architecture diagram now shows the live demo's stack as well as the benchmark.
 - `graph_norr` benchmark arm — parent expansion without the reranker, the exact
   configuration the hosted demo serves (not yet run; no results).
 - Benchmark results now record retrieved paper ids (for recall@k) and flag

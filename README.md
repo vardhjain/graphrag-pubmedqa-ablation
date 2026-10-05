@@ -152,7 +152,7 @@ basic RAG    + re-ranker     + full abstract   + related papers
                              via the graph     via shared topics
 ```
 
-![Benchmark pipeline: ingestion, shared chunk store, and the four setups](assets/architecture.svg)
+![Benchmark pipeline with the four setups, and the live demo's stack](assets/architecture.svg)
 
 A few terms used throughout the repo:
 

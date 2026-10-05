@@ -31,7 +31,9 @@ jobs:
           python -m pip install numpy scikit-learn scipy requests pytest pytest-cov "ruff==0.15.17" fastapi httpx "mcp>=1.24,<2"
 
       - name: Lint (ruff)
-        run: ruff check src scripts tests app backend
+        run: |
+          ruff check src scripts tests app backend
+          ruff format --check src scripts tests app backend
 
       - name: Eval regression gate
         # Blocks the build if results/summary.json (what the /benchmark page and

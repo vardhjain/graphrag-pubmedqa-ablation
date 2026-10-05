@@ -14,10 +14,12 @@ def make_retriever(encoder, reranker):
     ids = [f"Chunks/{k}_0" for k in keys]
     embs = encoder.encode(texts, normalize_embeddings=True)
     store = ChunkStore(ids, keys, texts, np.asarray(embs))
-    driver = FakeNeo4jDriver(abstracts={
-        "1": "FULL ABSTRACT 1: aspirin trial methods results conclusion",
-        "2": "FULL ABSTRACT 2: statin trial",
-    })
+    driver = FakeNeo4jDriver(
+        abstracts={
+            "1": "FULL ABSTRACT 1: aspirin trial methods results conclusion",
+            "2": "FULL ABSTRACT 2: statin trial",
+        }
+    )
     return Neo4jGraphRetriever(store, encoder, driver, reranker=reranker, top_k_final=1)
 
 
@@ -36,7 +38,9 @@ def test_answer_returns_answer_reasoning_path_and_sources(fake_encoder, fake_rer
     assert any(step["kind"] == "parent_paper" for step in result["reasoning_path"])
 
 
-def test_answer_reasoning_path_includes_concept_neighbours(fake_encoder, fake_reranker, monkeypatch):
+def test_answer_reasoning_path_includes_concept_neighbours(
+    fake_encoder, fake_reranker, monkeypatch
+):
     import kgqa.service as service
 
     texts = ["aspirin reduces heart attack risk in patients"]
@@ -46,8 +50,9 @@ def test_answer_reasoning_path_includes_concept_neighbours(fake_encoder, fake_re
         abstracts={"1": "FULL ABSTRACT 1: aspirin"},
         neighbours=[("99", "NEIGHBOUR ABSTRACT via shared MeSH concept")],
     )
-    retriever = Neo4jGraphRetriever(store, fake_encoder, driver, reranker=fake_reranker,
-                                    use_concepts=True, top_k_final=1)
+    retriever = Neo4jGraphRetriever(
+        store, fake_encoder, driver, reranker=fake_reranker, use_concepts=True, top_k_final=1
+    )
     monkeypatch.setattr(service, "_get_retriever", lambda graph_id, use_concepts=False: retriever)
     monkeypatch.setattr(service, "call_llm", lambda task, prompt, system="": "answer")
 
@@ -98,10 +103,16 @@ def test_get_retriever_builds_when_neo4j_unavailable(monkeypatch, fake_encoder, 
     monkeypatch.setattr(service, "_shared_encoder", lambda: fake_encoder)
     monkeypatch.setattr(service, "_shared_reranker", lambda: fake_reranker)
     monkeypatch.setattr(
-        service.ChunkStore, "from_dataset",
-        classmethod(lambda cls, encoder, include_unlabeled=True: ChunkStore(
-            ["Chunks/1_0"], ["1"], ["aspirin study"],
-            np.asarray(encoder.encode(["aspirin study"], normalize_embeddings=True)))),
+        service.ChunkStore,
+        "from_dataset",
+        classmethod(
+            lambda cls, encoder, include_unlabeled=True: ChunkStore(
+                ["Chunks/1_0"],
+                ["1"],
+                ["aspirin study"],
+                np.asarray(encoder.encode(["aspirin study"], normalize_embeddings=True)),
+            )
+        ),
     )
 
     retriever = service._get_retriever("demo")
@@ -172,10 +183,16 @@ def test_get_store_still_falls_back_by_default(monkeypatch, fake_encoder):
     service._STORE_CACHE.clear()
     monkeypatch.setattr(service, "_shared_encoder", lambda: fake_encoder)
     monkeypatch.setattr(
-        service.ChunkStore, "from_dataset",
-        classmethod(lambda cls, encoder, include_unlabeled=True: ChunkStore(
-            ["Chunks/1_0"], ["1"], ["aspirin study"],
-            np.asarray(encoder.encode(["aspirin study"], normalize_embeddings=True)))),
+        service.ChunkStore,
+        "from_dataset",
+        classmethod(
+            lambda cls, encoder, include_unlabeled=True: ChunkStore(
+                ["Chunks/1_0"],
+                ["1"],
+                ["aspirin study"],
+                np.asarray(encoder.encode(["aspirin study"], normalize_embeddings=True)),
+            )
+        ),
     )
 
     store = service._get_store("demo")
@@ -241,7 +258,8 @@ def test_failed_arango_connect_is_retried_after_the_window(monkeypatch):
 
 
 def test_reasoning_path_omits_graph_edges_when_expansion_degraded(
-        fake_encoder, fake_reranker, monkeypatch):
+    fake_encoder, fake_reranker, monkeypatch
+):
     import kgqa.service as service
 
     class BrokenDriver:
@@ -249,10 +267,15 @@ def test_reasoning_path_omits_graph_edges_when_expansion_degraded(
             raise RuntimeError("no connection")
 
     texts = ["aspirin reduces heart attack risk in patients"]
-    store = ChunkStore(["Chunks/1_0"], ["1"], texts,
-                       np.asarray(fake_encoder.encode(texts, normalize_embeddings=True)))
-    retriever = Neo4jGraphRetriever(store, fake_encoder, BrokenDriver(),
-                                    reranker=fake_reranker, top_k_final=1)
+    store = ChunkStore(
+        ["Chunks/1_0"],
+        ["1"],
+        texts,
+        np.asarray(fake_encoder.encode(texts, normalize_embeddings=True)),
+    )
+    retriever = Neo4jGraphRetriever(
+        store, fake_encoder, BrokenDriver(), reranker=fake_reranker, top_k_final=1
+    )
     monkeypatch.setattr(service, "_get_retriever", lambda graph_id, use_concepts=False: retriever)
     monkeypatch.setattr(service, "call_llm", lambda task, prompt, system="": "ok")
 
@@ -276,13 +299,16 @@ def test_reasoning_path_dedupes_steps():
     assert sum(s["kind"] == "concept_neighbour" for s in path) == 1
 
 
-@pytest.mark.parametrize("raw, expected", [
-    ("<think>hmm</think> Yes, it does.", "Yes, it does."),
-    ("<think>a</think>Yes.<think>b</think> Really.", "Yes. Really."),
-    ("Yes.\n<think>trailing unterminated reasoning", "Yes."),
-    ("stray reasoning</think> No.", "No."),
-    ("Plain answer.", "Plain answer."),
-])
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("<think>hmm</think> Yes, it does.", "Yes, it does."),
+        ("<think>a</think>Yes.<think>b</think> Really.", "Yes. Really."),
+        ("Yes.\n<think>trailing unterminated reasoning", "Yes."),
+        ("stray reasoning</think> No.", "No."),
+        ("Plain answer.", "Plain answer."),
+    ],
+)
 def test_strip_think(raw, expected):
     import kgqa.service as service
 
@@ -301,8 +327,9 @@ def test_answer_strips_think_on_hosted_path(fake_encoder, fake_reranker, monkeyp
 
     retriever = make_retriever(fake_encoder, fake_reranker)
     monkeypatch.setattr(service, "_get_retriever", lambda graph_id, use_concepts=False: retriever)
-    monkeypatch.setattr(service, "call_llm",
-                        lambda task, prompt, system="": "<think>x</think> Yes.")
+    monkeypatch.setattr(
+        service, "call_llm", lambda task, prompt, system="": "<think>x</think> Yes."
+    )
 
     assert service.answer("aspirin", graph_id="demo")["answer"] == "Yes."
 

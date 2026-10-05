@@ -6,9 +6,7 @@ repos:
     hooks:
       - id: ruff
         args: [--fix]
-      # No ruff-format hook: the codebase is not ruff-format clean (26 files
-      # would be reformatted), and CI only runs `ruff check`. Add it back only
-      # alongside a one-off repo-wide format commit.
+      - id: ruff-format
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0

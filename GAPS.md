@@ -374,10 +374,13 @@ workflow in the Actions tab, or use an external uptime pinger.
 
 ---
 
-## 20. No per-IP rate limiting on `/query` and `/mcp` — LOW (open)
+## 20. ~~No per-IP rate limiting on `/query` and `/mcp`~~ — FIXED
 
 **What:** Both endpoints are unauthenticated. A request-body size cap and a
 global concurrency limiter were added (protecting the 512MB instance from
 overload), but one client can still consume the whole Gemini free-tier quota.
-**Fix:** add per-IP rate limiting (e.g. a small token bucket middleware) if
-abuse appears.
+**Fixed:** `backend/main.py` now applies an in-memory per-client limit to POSTs
+on both paths (default 10/min on `/query`, 40/min on `/mcp`; tune or disable
+with `KGQA_RATE_LIMIT_PER_MIN`). The client is taken from `X-Forwarded-For`,
+which a caller can spoof, so this stops casual abuse and runaway clients rather
+than a determined attacker; the concurrency limiter still bounds total load.

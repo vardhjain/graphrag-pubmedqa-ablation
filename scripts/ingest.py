@@ -85,9 +85,11 @@ def check_duplicates(db) -> int:
         print(f"    {DEDUPE_AQL['HAS_CONTEXT']}")
         print("  MENTIONS may have the same problem:")
         print(f"    {DEDUPE_AQL['MENTIONS']}")
-        print("  Note: legacy edges keep their random _keys, so a later (keyed) re-ingest\n"
-              "  would add keyed copies. To migrate fully, TRUNCATE HAS_CONTEXT and\n"
-              "  MENTIONS and re-run this script instead (nodes are kept; edges rebuilt).")
+        print(
+            "  Note: legacy edges keep their random _keys, so a later (keyed) re-ingest\n"
+            "  would add keyed copies. To migrate fully, TRUNCATE HAS_CONTEXT and\n"
+            "  MENTIONS and re-run this script instead (nodes are kept; edges rebuilt)."
+        )
     elif surplus < 0:
         print("  Fewer edges than chunks -- some chunks are orphaned (ingest incomplete?).")
     else:
@@ -131,21 +133,33 @@ def ingest_split(db, dataset, model, on_duplicate_paper="ignore", batch_size=50)
             if not mesh_key:
                 continue
             concepts.append({"_key": mesh_key, "name": mesh})
-            mentions.append({"_key": mentions_key(paper_key, mesh_key),
-                             "_from": f"Papers/{paper_key}", "_to": f"Concepts/{mesh_key}"})
+            mentions.append(
+                {
+                    "_key": mentions_key(paper_key, mesh_key),
+                    "_from": f"Papers/{paper_key}",
+                    "_to": f"Concepts/{mesh_key}",
+                }
+            )
 
         ctx_texts = row.get("context", {}).get("contexts", [])
         ctx_labels = row.get("context", {}).get("labels", [])
         for idx, text in enumerate(ctx_texts):
             chunk_key = f"{paper_key}_{idx}"
-            chunks.append({
-                "_key": chunk_key,
-                "paper_key": paper_key,
-                "text": text,
-                "label": ctx_labels[idx] if idx < len(ctx_labels) else "context",
-            })
-            has_ctx.append({"_key": has_context_key(chunk_key),
-                            "_from": f"Papers/{paper_key}", "_to": f"Chunks/{chunk_key}"})
+            chunks.append(
+                {
+                    "_key": chunk_key,
+                    "paper_key": paper_key,
+                    "text": text,
+                    "label": ctx_labels[idx] if idx < len(ctx_labels) else "context",
+                }
+            )
+            has_ctx.append(
+                {
+                    "_key": has_context_key(chunk_key),
+                    "_from": f"Papers/{paper_key}",
+                    "_to": f"Chunks/{chunk_key}",
+                }
+            )
 
         count += 1
         if count % batch_size == 0:
@@ -156,10 +170,16 @@ def ingest_split(db, dataset, model, on_duplicate_paper="ignore", batch_size=50)
 
 def main():
     parser = argparse.ArgumentParser(description="Ingest PubMedQA into ArangoDB.")
-    parser.add_argument("--no-unlabeled", action="store_true",
-                        help="Ingest only the labeled split (faster, for testing).")
-    parser.add_argument("--check-duplicates", action="store_true",
-                        help="Only audit HAS_CONTEXT vs Chunks counts and print dedupe AQL.")
+    parser.add_argument(
+        "--no-unlabeled",
+        action="store_true",
+        help="Ingest only the labeled split (faster, for testing).",
+    )
+    parser.add_argument(
+        "--check-duplicates",
+        action="store_true",
+        help="Only audit HAS_CONTEXT vs Chunks counts and print dedupe AQL.",
+    )
     args = parser.parse_args()
 
     # Heavy imports are local so the helpers above stay importable in CI.

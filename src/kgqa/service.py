@@ -132,8 +132,10 @@ def _shared_db(graph_id: str):
                     )
                     _ARANGO_FAILED_AT.pop(graph_id, None)
                 except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
-                    print(f"[GraphRAG] ArangoDB unavailable for graph_id={graph_id!r} ({exc}). "
-                          "Falling back to ungraphed retrieval.")
+                    print(
+                        f"[GraphRAG] ArangoDB unavailable for graph_id={graph_id!r} ({exc}). "
+                        "Falling back to ungraphed retrieval."
+                    )
                     _ARANGO_DB_CACHE[graph_id] = None
                     _ARANGO_FAILED_AT[graph_id] = time.monotonic()
     return _ARANGO_DB_CACHE[graph_id]
@@ -166,8 +168,10 @@ def _shared_neo4j_driver():
                     _NEO4J_DRIVER_CACHE[None] = connect_neo4j(Neo4jConfig(), max_retries=1)
                     _NEO4J_FAILED_AT.pop(None, None)
                 except Exception as exc:  # noqa: BLE001 - degrade to no-graph, not a crash
-                    print(f"[GraphRAG] Neo4j unavailable for the demo graph ({exc}). "
-                          "Falling back to ungraphed retrieval.")
+                    print(
+                        f"[GraphRAG] Neo4j unavailable for the demo graph ({exc}). "
+                        "Falling back to ungraphed retrieval."
+                    )
                     _NEO4J_DRIVER_CACHE[None] = None
                     _NEO4J_FAILED_AT[None] = time.monotonic()
     return _NEO4J_DRIVER_CACHE[None]
@@ -207,8 +211,10 @@ def _dataset_fallback_or_raise(graph_id: str, backend_name: str, encoder) -> Chu
             "dataset-encode fallback is disabled (KGQA_DISABLE_DATASET_FALLBACK=true) "
             "on this tier."
         )
-    print(f"[GraphRAG] No {backend_name} for graph_id={graph_id!r}; encoding the labeled "
-          "split locally as a bounded fallback (this is slow -- not for production).")
+    print(
+        f"[GraphRAG] No {backend_name} for graph_id={graph_id!r}; encoding the labeled "
+        "split locally as a bounded fallback (this is slow -- not for production)."
+    )
     return ChunkStore.from_dataset(encoder, include_unlabeled=False)
 
 
@@ -251,7 +257,9 @@ def _get_store(graph_id: str) -> ChunkStore:
         return store
 
 
-def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever | Neo4jGraphRetriever:
+def _get_retriever(
+    graph_id: str, use_concepts: bool = False
+) -> GraphRetriever | Neo4jGraphRetriever:
     key = (graph_id, use_concepts)
     if key in _RETRIEVER_CACHE:
         return _RETRIEVER_CACHE[key]
@@ -264,14 +272,20 @@ def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever 
         if graph_id == _DEMO_GRAPH_ID:
             backend = _shared_neo4j_driver()
             retriever = Neo4jGraphRetriever(
-                store, _shared_encoder(), backend,
-                reranker=_shared_reranker(), use_concepts=use_concepts,
+                store,
+                _shared_encoder(),
+                backend,
+                reranker=_shared_reranker(),
+                use_concepts=use_concepts,
             )
         else:
             backend = _shared_db(graph_id)
             retriever = GraphRetriever(
-                store, _shared_encoder(), backend,
-                reranker=_shared_reranker(), use_concepts=use_concepts,
+                store,
+                _shared_encoder(),
+                backend,
+                reranker=_shared_reranker(),
+                use_concepts=use_concepts,
             )
         # Don't pin a graph-less retriever: once the connect-retry window
         # expires, the next request rebuilds it with a live backend.
@@ -280,8 +294,9 @@ def _get_retriever(graph_id: str, use_concepts: bool = False) -> GraphRetriever 
         return retriever
 
 
-def _build_reasoning_path(candidates, studies: list[tuple[str, str]],
-                          degraded: bool = False) -> list[dict]:
+def _build_reasoning_path(
+    candidates, studies: list[tuple[str, str]], degraded: bool = False
+) -> list[dict]:
     """Seed chunks, then HAS_CONTEXT parent papers, then MENTIONS neighbours.
 
     When graph expansion degraded to raw chunks, no traversal happened, so no
@@ -305,16 +320,22 @@ def _build_reasoning_path(candidates, studies: list[tuple[str, str]],
                     seen.add((paper_key, c.chunk_id))
                     steps.append(
                         ReasoningStep(
-                            kind="parent_paper", node_id=f"Papers/{paper_key}",
-                            label=paper_key, from_node=c.chunk_id, edge="HAS_CONTEXT",
+                            kind="parent_paper",
+                            node_id=f"Papers/{paper_key}",
+                            label=paper_key,
+                            from_node=c.chunk_id,
+                            edge="HAS_CONTEXT",
                         )
                     )
         elif (paper_key, "") not in seen:
             seen.add((paper_key, ""))
             steps.append(
                 ReasoningStep(
-                    kind="concept_neighbour", node_id=f"Papers/{paper_key}",
-                    label=paper_key, from_node=None, edge="MENTIONS",
+                    kind="concept_neighbour",
+                    node_id=f"Papers/{paper_key}",
+                    label=paper_key,
+                    from_node=None,
+                    edge="MENTIONS",
                 )
             )
     return [step.__dict__ for step in steps]

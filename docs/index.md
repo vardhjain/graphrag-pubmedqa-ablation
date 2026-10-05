@@ -21,7 +21,7 @@ We tested four setups on 200 yes/no/maybe questions from
 research papers. Each setup adds exactly one technique to the one before it, so
 every change in accuracy can be credited to a single cause.
 
-![Benchmark pipeline and the four setups](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/assets/architecture.svg)
+![Benchmark pipeline with the four setups, and the live demo's stack](https://raw.githubusercontent.com/vardhjain/graphrag-pubmedqa-ablation/main/assets/architecture.svg)
 
 ## Results
 

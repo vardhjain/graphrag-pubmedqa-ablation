@@ -77,10 +77,17 @@ class Evaluator:
     # JSON when empty so old-format consumers see exactly the old keys.
     meta: dict = field(default_factory=dict)
 
-    def record(self, ground_truth: str, prediction: str,
-               latency: float = 0.0, sample_id: str | None = None,
-               failed: bool = False, retrieved_papers: list | None = None,
-               degraded: bool = False, truncated: bool = False) -> None:
+    def record(
+        self,
+        ground_truth: str,
+        prediction: str,
+        latency: float = 0.0,
+        sample_id: str | None = None,
+        failed: bool = False,
+        retrieved_papers: list | None = None,
+        degraded: bool = False,
+        truncated: bool = False,
+    ) -> None:
         pred = prediction.lower().strip()
         if pred not in LABELS:
             pred = "maybe"
@@ -104,8 +111,10 @@ class Evaluator:
         pubid (run_benchmark.py's convention); a genuinely empty retrieval
         counts as a miss, not an exclusion."""
         scored = [
-            (sid, papers) for sid, papers, failed in
-            zip(self.ids, self.retrieved_papers, self.failed, strict=False)
+            (sid, papers)
+            for sid, papers, failed in zip(
+                self.ids, self.retrieved_papers, self.failed, strict=False
+            )
             if sid is not None and not failed
         ]
         if not scored:
@@ -119,8 +128,9 @@ class Evaluator:
     def macro_f1(self) -> float:
         if not self.y_true:
             return 0.0
-        return f1_score(self.y_true, self.y_pred, labels=list(LABELS),
-                        average="macro", zero_division=0)
+        return f1_score(
+            self.y_true, self.y_pred, labels=list(LABELS), average="macro", zero_division=0
+        )
 
     def avg_latency(self) -> float:
         return sum(self.latencies) / len(self.latencies) if self.latencies else 0.0
@@ -157,15 +167,18 @@ class Evaluator:
         print(f"{'=' * 52}")
         print(f"  Samples   : {len(self.y_true)}")
         if self.n_failed():
-            print(f"  Failed    : {self.n_failed()} (recorded as 'maybe'; "
-                  "excluded from paired significance tests, see compare.py)")
+            print(
+                f"  Failed    : {self.n_failed()} (recorded as 'maybe'; "
+                "excluded from paired significance tests, see compare.py)"
+            )
         print(f"  Accuracy  : {self.accuracy():.2%}")
         print(f"  Macro F1  : {self.macro_f1():.2%}")
-        print(f"  Recall@k  : {self.recall_at_k():.2%}  (gold paper among retrieved, pre-expansion)")
+        print(
+            f"  Recall@k  : {self.recall_at_k():.2%}  (gold paper among retrieved, pre-expansion)"
+        )
         print(f"  Avg/query : {self.avg_latency():.1f}s")
         print(f"{'-' * 52}")
-        print(classification_report(self.y_true, self.y_pred,
-                                    labels=list(LABELS), zero_division=0))
+        print(classification_report(self.y_true, self.y_pred, labels=list(LABELS), zero_division=0))
         return self.summary()
 
     def save(self, path: str, quiet: bool = False) -> None:
@@ -221,8 +234,8 @@ def mcnemar_test(y_true: list, pred_a: list, pred_b: list) -> dict:
     n = b + c
     p_value = float(binomtest(b, n, 0.5).pvalue) if n > 0 else 1.0
     return {
-        "b_gains": b,        # B right, A wrong
-        "c_losses": c,       # A right, B wrong
+        "b_gains": b,  # B right, A wrong
+        "c_losses": c,  # A right, B wrong
         "discordant": n,
         "p_value": p_value,
         "significant_at_0.05": bool(p_value < 0.05),

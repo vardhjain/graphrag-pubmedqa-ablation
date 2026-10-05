@@ -20,8 +20,9 @@ test:  ## Run the test suite
 lint:  ## Lint with ruff
 	ruff check src scripts tests app backend
 
-format:  ## Auto-fix lint issues with ruff
+format:  ## Auto-fix lint issues and format with ruff
 	ruff check --fix src scripts tests app backend
+	ruff format src scripts tests app backend
 
 ingest:  ## Build the ArangoDB knowledge graph (needs ARANGO_PASS)
 	python scripts/ingest.py

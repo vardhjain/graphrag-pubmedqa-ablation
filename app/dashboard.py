@@ -85,8 +85,11 @@ def main():
     plain = next((a for a in arms if a["arm"] == "plain"), None)
     for col, arm in zip(cols, arms, strict=False):
         # Only label a delta "vs plain" when a plain arm actually exists.
-        delta = f"{arm['accuracy'] - plain['accuracy']:+.1f} pp vs plain" \
-            if plain is not None and arm is not plain else None
+        delta = (
+            f"{arm['accuracy'] - plain['accuracy']:+.1f} pp vs plain"
+            if plain is not None and arm is not plain
+            else None
+        )
         col.metric(arm["arm"], f"{arm['accuracy']:.1f}%", delta)
 
     st.success(
@@ -129,7 +132,8 @@ def main():
         cdf["p"] = cdf["p_display"] if "p_display" in cdf else cdf["p_value"].map(format_p)
         st.dataframe(
             cdf[["contrast", "delta_acc", "gains", "losses", "p", "significant"]],
-            width="stretch", hide_index=True,
+            width="stretch",
+            hide_index=True,
         )
         st.caption("Latency by arm (seconds / query)")
         st.bar_chart(df["avg_latency"], color="#26A69A", horizontal=True)
@@ -139,6 +143,7 @@ def main():
     if raw:
         st.subheader("Per-class detail")
         from sklearn.metrics import confusion_matrix, f1_score
+
         tabs = st.tabs([a for a in ARM_ORDER if a in raw])
         for tab, arm in zip(tabs, [a for a in ARM_ORDER if a in raw], strict=False):
             with tab:
@@ -146,8 +151,9 @@ def main():
                 cm = confusion_matrix(r["y_true"], r["y_pred"], labels=LABELS)
                 st.write("Confusion matrix (rows = actual, cols = predicted)")
                 st.dataframe(pd.DataFrame(cm, index=LABELS, columns=LABELS))
-                f1s = f1_score(r["y_true"], r["y_pred"], labels=LABELS,
-                               average=None, zero_division=0)
+                f1s = f1_score(
+                    r["y_true"], r["y_pred"], labels=LABELS, average=None, zero_division=0
+                )
                 st.write("Per-class F1")
                 st.bar_chart(pd.Series(f1s, index=LABELS))
 

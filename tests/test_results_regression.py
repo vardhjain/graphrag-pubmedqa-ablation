@@ -31,7 +31,9 @@ def _arm(data, name):
     for a in data["arms"]:
         if a["arm"] == name:
             return a
-    raise AssertionError(f"arm {name!r} not found in results/summary.json -- was it renamed or removed?")
+    raise AssertionError(
+        f"arm {name!r} not found in results/summary.json -- was it renamed or removed?"
+    )
 
 
 def _contrast(data, from_arm, to_arm):
@@ -68,7 +70,9 @@ def test_parent_expansion_effect_is_still_significant():
     contrast = _contrast(_load(), "plain_rr", "graph")
     assert contrast["significant"] is True
     assert contrast["p_value"] < 0.05
-    assert contrast["delta_acc"] >= 15.0, "parent-expansion lift shrank well below the claimed +22.5pp"
+    assert contrast["delta_acc"] >= 15.0, (
+        "parent-expansion lift shrank well below the claimed +22.5pp"
+    )
 
 
 def test_graph_concepts_latency_within_bounds():

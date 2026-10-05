@@ -113,9 +113,7 @@ def _gemini_text(payload: dict) -> str:
         raise RuntimeError(f"Gemini returned no text (finishReason={reason})")
     # Thinking models can return a leading ``thought: true`` part, and long
     # answers can be split across several parts -- join every non-thought one.
-    text = "".join(
-        p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought")
-    )
+    text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought"))
     if not text.strip():
         reason = candidate.get("finishReason", "unknown")
         raise RuntimeError(f"Gemini returned no answer text (finishReason={reason})")

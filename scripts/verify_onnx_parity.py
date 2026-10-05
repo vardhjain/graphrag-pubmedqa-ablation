@@ -109,8 +109,10 @@ def main() -> int:
         print(f"  {status} cos={cos:.6f}  {label!r}")
 
     # --- 2. retrieval equivalence against a torch-encoded corpus --------------
-    print(f"\n[2/2] Top-{TOP_K} retrieval order over a torch-encoded corpus "
-          f"({len(CORPUS)} chunks, {len(QUERIES)} queries):")
+    print(
+        f"\n[2/2] Top-{TOP_K} retrieval order over a torch-encoded corpus "
+        f"({len(CORPUS)} chunks, {len(QUERIES)} queries):"
+    )
     corpus_vecs = np.asarray(torch_encoder.encode(CORPUS, normalize_embeddings=True))
     store = ChunkStore(
         ids=[f"Chunks/{i}_0" for i in range(len(CORPUS))],
@@ -136,8 +138,10 @@ def main() -> int:
         for f in failures:
             print(f"  - {f}")
         return 1
-    print("PASS: ONNX encoder matches the torch encoder's vector space and "
-          "retrieval order. Safe to deploy KGQA_ENCODER=onnx.")
+    print(
+        "PASS: ONNX encoder matches the torch encoder's vector space and "
+        "retrieval order. Safe to deploy KGQA_ENCODER=onnx."
+    )
     return 0
 
 

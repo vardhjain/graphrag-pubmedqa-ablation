@@ -11,6 +11,7 @@ import threading
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -198,3 +199,37 @@ def test_rest_and_mcp_share_one_answer_limiter():
 
     assert main.ANSWER_LIMITER is mcp_server.ANSWER_LIMITER
     assert mcp_server.ANSWER_LIMITER.total_tokens == 3
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    from backend import main
+
+    main._rate_hits.clear()
+    yield
+    main._rate_hits.clear()
+
+
+def test_query_is_rate_limited_per_client(monkeypatch):
+    from backend import main
+
+    monkeypatch.setitem(main._RATE_LIMITS, "/query", 2)
+    body = {"question": "q", "graph_id": "nope"}  # 404s before reaching the LLM
+    headers = {"x-forwarded-for": "203.0.113.7"}
+    assert client.post("/query", json=body, headers=headers).status_code == 404
+    assert client.post("/query", json=body, headers=headers).status_code == 404
+    limited = client.post("/query", json=body, headers=headers)
+    assert limited.status_code == 429
+    assert limited.headers["retry-after"] == "60"
+    # A different client is unaffected, and so is /health.
+    other = client.post("/query", json=body, headers={"x-forwarded-for": "203.0.113.8"})
+    assert other.status_code == 404
+    assert client.get("/health").status_code == 200
+
+
+def test_rate_limit_window_expires():
+    from backend import main
+
+    assert main._rate_limited("k", 1, now=100.0) is False
+    assert main._rate_limited("k", 1, now=120.0) is True
+    assert main._rate_limited("k", 1, now=161.0) is False

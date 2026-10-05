@@ -29,8 +29,8 @@ def test_call_ollama_builds_payload_and_returns_content(monkeypatch):
     assert payload["messages"][0] == {"role": "system", "content": "be helpful"}
     assert payload["messages"][-1] == {"role": "user", "content": "my prompt"}
     assert payload["stream"] is False
-    assert "num_predict" in payload["options"]   # generation cap is applied
-    assert "keep_alive" in payload                # model kept resident
+    assert "num_predict" in payload["options"]  # generation cap is applied
+    assert "keep_alive" in payload  # model kept resident
 
 
 def test_call_ollama_meta_returns_done_reason(monkeypatch):

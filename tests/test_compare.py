@@ -156,17 +156,31 @@ def test_holm_adjust_preserves_input_order():
 def _write_arm(d, arm, preds, truth, meta=None, **extra):
     import json
 
-    data = {"model": arm, "accuracy": sum(p == t for p, t in zip(preds, truth, strict=True)) / len(truth),
-            "macro_f1": 0.5, "samples": len(truth), "avg_latency": 1.0,
-            "y_true": truth, "y_pred": preds, "ids": list(range(len(truth))), **extra}
+    data = {
+        "model": arm,
+        "accuracy": sum(p == t for p, t in zip(preds, truth, strict=True)) / len(truth),
+        "macro_f1": 0.5,
+        "samples": len(truth),
+        "avg_latency": 1.0,
+        "y_true": truth,
+        "y_pred": preds,
+        "ids": list(range(len(truth))),
+        **extra,
+    }
     if meta is not None:
         data["meta"] = meta
     (d / f"{arm}_results.json").write_text(json.dumps(data))
 
 
 def _meta(arm, seed=42, model="m", n=4, complete=True):
-    return {"arm": arm, "seed": seed, "llm_model": model, "n_requested": n,
-            "n_done": n, "complete": complete}
+    return {
+        "arm": arm,
+        "seed": seed,
+        "llm_model": model,
+        "n_requested": n,
+        "n_done": n,
+        "complete": complete,
+    }
 
 
 def _run_main(tmp_path, monkeypatch):
@@ -185,8 +199,15 @@ TRUTH = ["yes", "no", "yes", "no"]
 
 def test_compare_main_pins_summary_json_key_contract(tmp_path, monkeypatch):
     _write_arm(tmp_path, "plain", ["no", "no", "no", "no"], TRUTH, _meta("plain", seed=7))
-    _write_arm(tmp_path, "plain_rr", ["yes", "no", "no", "no"], TRUTH, _meta("plain_rr", seed=7),
-               n_degraded=0, n_truncated=1)
+    _write_arm(
+        tmp_path,
+        "plain_rr",
+        ["yes", "no", "no", "no"],
+        TRUTH,
+        _meta("plain_rr", seed=7),
+        n_degraded=0,
+        n_truncated=1,
+    )
     _write_arm(tmp_path, "graph", ["yes", "no", "yes", "no"], TRUTH, _meta("graph", seed=7))
     out = _run_main(tmp_path, monkeypatch)
 
@@ -194,14 +215,34 @@ def test_compare_main_pins_summary_json_key_contract(tmp_path, monkeypatch):
     assert {"n", "seed", "model", "dataset", "arms", "contrasts"} <= set(out)
     assert out["seed"] == 7 and out["model"] == "m"  # stamped from meta, not env
     assert out["holm_family"] == [f"{a}->{b}" for a, b, _ in CONTRASTS]
-    arm_keys = {"arm", "accuracy", "accuracy_ci95", "macro_f1", "recall_at_k",
-                "avg_latency", "samples", "n_failed", "adds"}
+    arm_keys = {
+        "arm",
+        "accuracy",
+        "accuracy_ci95",
+        "macro_f1",
+        "recall_at_k",
+        "avg_latency",
+        "samples",
+        "n_failed",
+        "adds",
+    }
     for a in out["arms"]:
         assert arm_keys <= set(a)
     rr = next(a for a in out["arms"] if a["arm"] == "plain_rr")
     assert rr["n_truncated"] == 1 and rr["n_degraded"] == 0
-    contrast_keys = {"from", "to", "effect", "delta_acc", "gains", "losses", "p_value",
-                     "p_display", "p_holm", "p_holm_display", "significant"}
+    contrast_keys = {
+        "from",
+        "to",
+        "effect",
+        "delta_acc",
+        "gains",
+        "losses",
+        "p_value",
+        "p_display",
+        "p_holm",
+        "p_holm_display",
+        "significant",
+    }
     for c in out["contrasts"]:
         assert contrast_keys <= set(c)
     c = next(c for c in out["contrasts"] if c["to"] == "graph")

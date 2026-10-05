@@ -12,23 +12,22 @@ from tests.conftest import FakeDB
 
 
 def test_plain_arm_has_no_reranker(fake_encoder, fake_reranker):
-    r = build_retriever("plain", store=None, encoder=fake_encoder,
-                        reranker=fake_reranker, db=None)
+    r = build_retriever("plain", store=None, encoder=fake_encoder, reranker=fake_reranker, db=None)
     assert isinstance(r, PlainRetriever)
     assert r.reranker is None
 
 
 def test_plain_rr_arm_uses_the_given_reranker(fake_encoder, fake_reranker):
-    r = build_retriever("plain_rr", store=None, encoder=fake_encoder,
-                        reranker=fake_reranker, db=None)
+    r = build_retriever(
+        "plain_rr", store=None, encoder=fake_encoder, reranker=fake_reranker, db=None
+    )
     assert isinstance(r, PlainRetriever)
     assert r.reranker is fake_reranker
 
 
 def test_graph_arm_uses_reranker_and_no_concepts(fake_encoder, fake_reranker):
     db = FakeDB(abstracts={})
-    r = build_retriever("graph", store=None, encoder=fake_encoder,
-                        reranker=fake_reranker, db=db)
+    r = build_retriever("graph", store=None, encoder=fake_encoder, reranker=fake_reranker, db=db)
     assert isinstance(r, GraphRetriever)
     assert r.reranker is fake_reranker
     assert r.use_concepts is False
@@ -36,8 +35,9 @@ def test_graph_arm_uses_reranker_and_no_concepts(fake_encoder, fake_reranker):
 
 def test_graph_concepts_arm_uses_reranker_and_concepts(fake_encoder, fake_reranker):
     db = FakeDB(abstracts={})
-    r = build_retriever("graph_concepts", store=None, encoder=fake_encoder,
-                        reranker=fake_reranker, db=db)
+    r = build_retriever(
+        "graph_concepts", store=None, encoder=fake_encoder, reranker=fake_reranker, db=db
+    )
     assert isinstance(r, GraphRetriever)
     assert r.reranker is fake_reranker
     assert r.use_concepts is True
@@ -48,8 +48,9 @@ def test_graph_norr_arm_ignores_any_passed_reranker(fake_encoder, fake_reranker)
     it must come out reranker=None even if a reranker is passed in, since
     that's exactly what the hosted demo's KGQA_SKIP_RERANKER=true does."""
     db = FakeDB(abstracts={})
-    r = build_retriever("graph_norr", store=None, encoder=fake_encoder,
-                        reranker=fake_reranker, db=db)
+    r = build_retriever(
+        "graph_norr", store=None, encoder=fake_encoder, reranker=fake_reranker, db=db
+    )
     assert isinstance(r, GraphRetriever)
     assert r.reranker is None
     assert r.use_concepts is False

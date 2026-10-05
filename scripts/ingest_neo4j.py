@@ -104,12 +104,14 @@ def ingest_labeled_split(driver, model, batch_size: int = 50) -> int:
             if ctx_texts:
                 embeddings = model.encode(ctx_texts)
                 for idx, (text, emb) in enumerate(zip(ctx_texts, embeddings, strict=False)):
-                    chunk_rows.append({
-                        "key": f"{paper_key}_{idx}",
-                        "paper": paper_key,
-                        "text": text,
-                        "embedding": emb.tolist(),
-                    })
+                    chunk_rows.append(
+                        {
+                            "key": f"{paper_key}_{idx}",
+                            "paper": paper_key,
+                            "text": text,
+                            "embedding": emb.tolist(),
+                        }
+                    )
 
             count += 1
             if count % batch_size == 0:

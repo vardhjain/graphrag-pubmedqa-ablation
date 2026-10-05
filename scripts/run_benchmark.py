@@ -59,8 +59,13 @@ def warm_model(api_url: str, model: str) -> None:
     try:
         requests.post(
             _ollama_base(api_url) + "/api/generate",
-            json={"model": model, "prompt": "ok", "stream": False,
-                  "keep_alive": "30m", "options": {"num_predict": 1}},
+            json={
+                "model": model,
+                "prompt": "ok",
+                "stream": False,
+                "keep_alive": "30m",
+                "options": {"num_predict": 1},
+            },
             timeout=180,
         )
     except Exception:
@@ -120,8 +125,9 @@ def build_retriever(arm, store, encoder, reranker, db):
 # ── run metadata / checkpointing ──────────────────────────────────────────────
 def _git_sha() -> str | None:
     try:
-        out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
-                             text=True, timeout=10)
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=10
+        )
     except Exception:
         return None
     return (out.stdout.strip() or None) if out.returncode == 0 else None
@@ -157,9 +163,10 @@ def check_resume(data: dict, arm: str, seed: int, n_requested: int, sample_ids: 
     for key, want in (("arm", arm), ("seed", seed), ("n_requested", n_requested)):
         if meta.get(key) != want:
             raise ValueError(
-                f"checkpoint {key}={meta.get(key)!r} does not match this run's {want!r}")
+                f"checkpoint {key}={meta.get(key)!r} does not match this run's {want!r}"
+            )
     done = list(data.get("ids") or [])
-    if done != list(sample_ids[:len(done)]):
+    if done != list(sample_ids[: len(done)]):
         raise ValueError("checkpoint ids are not a prefix of this run's sample order")
     return done
 
@@ -194,16 +201,27 @@ def install_done_reason_probe() -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--arm", required=True, choices=ARMS)
-    parser.add_argument("--n", type=int, default=None, help="sample size (default: config BENCHMARK_N)")
-    parser.add_argument("--seed", type=int, default=None, help="random seed (default: config RANDOM_SEED)")
+    parser.add_argument(
+        "--n", type=int, default=None, help="sample size (default: config BENCHMARK_N)"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None, help="random seed (default: config RANDOM_SEED)"
+    )
     parser.add_argument("--output", default=None, help="results JSON path")
-    parser.add_argument("--resume", action="store_true",
-                        help="continue from <output>.partial if it matches arm/seed/n")
-    parser.add_argument("--no-ollama-start", action="store_true",
-                        help="don't auto-start/health-check the Ollama server")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue from <output>.partial if it matches arm/seed/n",
+    )
+    parser.add_argument(
+        "--no-ollama-start",
+        action="store_true",
+        help="don't auto-start/health-check the Ollama server",
+    )
     args = parser.parse_args()
 
     from kgqa.config import BENCHMARK_N, LLM_MODEL, OLLAMA_API, RANDOM_SEED, ArangoConfig
@@ -279,8 +297,10 @@ def main():
                 latency = time.time() - t0  # the successful attempt only
                 break
             except Exception as exc:
-                print(f"      [warn] q{i + 1} attempt {attempt}/{MAX_TRIES} failed: "
-                      f"{type(exc).__name__}: {exc}")
+                print(
+                    f"      [warn] q{i + 1} attempt {attempt}/{MAX_TRIES} failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
                 if attempt < MAX_TRIES and not args.no_ollama_start:
                     ensure_ollama(OLLAMA_API, LLM_MODEL, restart=True)
         total = time.time() - t_total
@@ -293,29 +313,42 @@ def main():
         if raw is None:
             pred = "maybe"  # last resort so one bad call doesn't abort the arm
             latency = total
-            print(f"[{i + 1:3d}]  GT={s.final_decision:<5}  Pred={pred:<5}  !  "
-                  f"(skipped after {MAX_TRIES} tries)")
+            print(
+                f"[{i + 1:3d}]  GT={s.final_decision:<5}  Pred={pred:<5}  !  "
+                f"(skipped after {MAX_TRIES} tries)"
+            )
         else:
             pred = fuzzy.extract_answer(raw)
             icon = "v" if pred == s.final_decision.lower().strip() else "x"
             retry_note = f", {total:.1f}s incl. retries" if total - latency > 0.5 else ""
             flags = (" [degraded]" if degraded else "") + (" [truncated]" if truncated else "")
-            print(f"[{i + 1:3d}]  GT={s.final_decision:<5}  Pred={pred:<5}  {icon}  "
-                  f"({latency:.1f}s{retry_note}){flags}")
+            print(
+                f"[{i + 1:3d}]  GT={s.final_decision:<5}  Pred={pred:<5}  {icon}  "
+                f"({latency:.1f}s{retry_note}){flags}"
+            )
 
-        evaluator.record(s.final_decision, pred, latency, sample_id=s.pubid,
-                         failed=(raw is None), retrieved_papers=retrieved_papers,
-                         degraded=degraded, truncated=truncated)
+        evaluator.record(
+            s.final_decision,
+            pred,
+            latency,
+            sample_id=s.pubid,
+            failed=(raw is None),
+            retrieved_papers=retrieved_papers,
+            degraded=degraded,
+            truncated=truncated,
+        )
         if (i + 1) % CHECKPOINT_EVERY == 0:
             meta["n_done"] = len(evaluator.ids)
             evaluator.save(partial_path, quiet=True)
 
     n_degraded, n_truncated = sum(evaluator.degraded), sum(evaluator.truncated)
     if n_degraded:
-        print(f"\n[GraphRAG] {n_degraded}/{len(samples)} question(s) had graph expansion "
-              "fail and fell back to raw chunks -- see the [GraphRAG] ... expansion failed "
-              "warnings above for why. A large count here means this arm's numbers may be "
-              "closer to a plain arm's than they appear.")
+        print(
+            f"\n[GraphRAG] {n_degraded}/{len(samples)} question(s) had graph expansion "
+            "fail and fell back to raw chunks -- see the [GraphRAG] ... expansion failed "
+            "warnings above for why. A large count here means this arm's numbers may be "
+            "closer to a plain arm's than they appear."
+        )
     if n_truncated:
         print(f"[LLM] {n_truncated}/{len(samples)} answer(s) hit the num_predict cap.")
 

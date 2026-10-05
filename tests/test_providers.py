@@ -118,7 +118,8 @@ def test_call_gemini_names_finish_reason_when_response_has_no_text(monkeypatch):
 
     monkeypatch.setattr(providers, "GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(
-        providers.requests, "post",
+        providers.requests,
+        "post",
         lambda *a, **k: FakeResp({"candidates": [{"finishReason": "SAFETY"}]}),
     )
 
@@ -131,7 +132,8 @@ def test_call_gemini_raises_when_no_candidates(monkeypatch):
 
     monkeypatch.setattr(providers, "GEMINI_API_KEY", "test-key")
     monkeypatch.setattr(
-        providers.requests, "post",
+        providers.requests,
+        "post",
         lambda *a, **k: FakeResp({"promptFeedback": {"blockReason": "OTHER"}}),
     )
 
@@ -172,19 +174,33 @@ def test_call_llm_raises_when_all_providers_fail(monkeypatch):
 def test_gemini_text_joins_non_thought_parts():
     import kgqa.providers as providers
 
-    payload = {"candidates": [{"content": {"parts": [
-        {"text": "internal reasoning", "thought": True},
-        {"text": "Yes, "},
-        {"text": "it does."},
-    ]}}]}
+    payload = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {"text": "internal reasoning", "thought": True},
+                        {"text": "Yes, "},
+                        {"text": "it does."},
+                    ]
+                }
+            }
+        ]
+    }
     assert providers._gemini_text(payload) == "Yes, it does."
 
 
 def test_gemini_text_raises_when_only_thoughts():
     import kgqa.providers as providers
 
-    payload = {"candidates": [{"finishReason": "MAX_TOKENS", "content": {"parts": [
-        {"text": "thinking...", "thought": True}]}}]}
+    payload = {
+        "candidates": [
+            {
+                "finishReason": "MAX_TOKENS",
+                "content": {"parts": [{"text": "thinking...", "thought": True}]},
+            }
+        ]
+    }
     with pytest.raises(RuntimeError, match="MAX_TOKENS"):
         providers._gemini_text(payload)
 
