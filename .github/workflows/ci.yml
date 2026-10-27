@@ -32,7 +32,6 @@ jobs:
 
       - name: Lint (ruff)
         run: |
-          ruff check --diff --fix tests/test_flat_parent.py tests/test_compare_parent_baseline.py
           ruff format --diff src/kgqa/retrieval/flat_parent.py scripts/run_benchmark.py scripts/compare_parent_baseline.py scripts/check_parent_parity.py tests/test_flat_parent.py tests/test_compare_parent_baseline.py
           ruff check src scripts tests app backend
           ruff format --check src scripts tests app backend
