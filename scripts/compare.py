@@ -68,10 +68,23 @@ def load_results(results_dir: str | None = None):
 # Required in every new-format checkpoint; a missing field cannot be
 # interpreted as "same" when the published conclusion depends on fairness.
 PROTOCOL_KEYS = (
-    "protocol_version", "answer_parser", "sample_sha256", "corpus_sha256",
-    "prompt_sha256", "dataset_name", "embedding_model", "reranker_model",
-    "llm_model", "seed", "n_requested", "num_ctx", "num_predict",
-    "temperature", "top_k", "top_k_candidates", "git_sha",
+    "protocol_version",
+    "answer_parser",
+    "sample_sha256",
+    "corpus_sha256",
+    "prompt_sha256",
+    "dataset_name",
+    "embedding_model",
+    "reranker_model",
+    "llm_model",
+    "seed",
+    "n_requested",
+    "num_ctx",
+    "num_predict",
+    "temperature",
+    "top_k",
+    "top_k_candidates",
+    "git_sha",
 )
 
 
@@ -114,9 +127,7 @@ def check_runs(results: dict) -> tuple[set, list[str]]:
                 f"{arm}: INCOMPLETE run ({meta.get('n_done')}/{meta.get('n_requested')} done)"
             )
     eligible = {
-        arm: result
-        for arm, result in results.items()
-        if arm not in excluded and result.get("meta")
+        arm: result for arm, result in results.items() if arm not in excluded and result.get("meta")
     }
     if eligible:
         ref = Counter(_run_key(result) for result in eligible.values()).most_common(1)[0][0]
