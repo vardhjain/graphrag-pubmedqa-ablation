@@ -89,7 +89,7 @@ def validate_summary(data: dict) -> None:
             lo, hi = ci
             assert _percent(lo) and _percent(hi) and lo <= hi
             # Reported CIs and accuracies can be rounded to 2 decimal places.
-            assert lo <= arm["accuracy"] + 0.02 <= hi + 0.02, (
+            assert lo - 0.02 <= arm["accuracy"] <= hi + 0.02, (
                 f"{name}: accuracy outside reported CI"
             )
         for flag in ("complete", "excluded_from_tests"):
@@ -117,7 +117,11 @@ def validate_summary(data: dict) -> None:
         assert _finite_number(contrast["delta_acc"])
         assert -100 <= contrast["delta_acc"] <= 100
 
-        expected_p = float(binomtest(gains, gains + losses, 0.5).pvalue) if gains + losses else 1.0
+        expected_p = (
+            float(binomtest(gains, gains + losses, 0.5).pvalue)
+            if gains + losses
+            else 1.0
+        )
         assert _probability(contrast["p_value"]), f"{pair}: invalid p-value"
         # The checked-in legacy JSON rounded 5.46e-6 to 0.0000; newer
         # compare.py output retains full precision.
@@ -192,19 +196,33 @@ def _synthetic_summary(gains: int, losses: int) -> dict:
         "model": "synthetic-test-model",
         "dataset": "synthetic",
         "arms": [
-            {"arm": "baseline", "samples": n, "accuracy": 50.0, "macro_f1": 40.0, "avg_latency": 1.0},
-            {"arm": "candidate", "samples": n, "accuracy": 50.0 + delta, "macro_f1": 38.0, "avg_latency": 2.0},
+            {
+                "arm": "baseline",
+                "samples": n,
+                "accuracy": 50.0,
+                "macro_f1": 40.0,
+                "avg_latency": 1.0,
+            },
+            {
+                "arm": "candidate",
+                "samples": n,
+                "accuracy": 50.0 + delta,
+                "macro_f1": 38.0,
+                "avg_latency": 2.0,
+            },
         ],
-        "contrasts": [{
-            "from": "baseline",
-            "to": "candidate",
-            "effect": "synthetic change",
-            "gains": gains,
-            "losses": losses,
-            "delta_acc": delta,
-            "p_value": p,
-            "significant": p < 0.05,
-        }],
+        "contrasts": [
+            {
+                "from": "baseline",
+                "to": "candidate",
+                "effect": "synthetic change",
+                "gains": gains,
+                "losses": losses,
+                "delta_acc": delta,
+                "p_value": p,
+                "significant": p < 0.05,
+            }
+        ],
     }
 
 
