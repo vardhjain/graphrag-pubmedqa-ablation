@@ -72,6 +72,7 @@ _CONCEPT_AQL = """
         RETURN { paper: n.nkey, abstract: CONCAT_SEPARATOR(" ", sections), shared: n.shared }
 """
 
+
 class GraphRetriever(GraphExpansionMixin, BaseRetriever):
     name = "graph"
 
