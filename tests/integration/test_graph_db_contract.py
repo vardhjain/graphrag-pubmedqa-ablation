@@ -162,9 +162,7 @@ def test_arango_parent_abstract_has_numerical_section_order(arango_db):
     texts = [f"section{i}" for i in range(12)]
     ingest_split(arango_db, [_record("order", texts)], TinyEncoder(), batch_size=1)
     retriever = GraphRetriever(store=None, encoder=None, db=arango_db)
-    assert retriever._parent_abstracts(["Chunks/order_0"]) == [
-        ("order", " ".join(texts))
-    ]
+    assert retriever._parent_abstracts(["Chunks/order_0"]) == [("order", " ".join(texts))]
 
 
 @pytest.mark.xfail(
@@ -230,9 +228,7 @@ def test_neo4j_parent_abstract_has_numerical_section_order(neo4j_graph):
     _neo4j_merge(driver, [paper], chunks, [], [])
 
     retriever = Neo4jGraphRetriever(store=None, encoder=None, driver=driver)
-    assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [
-        (paper, " ".join(texts))
-    ]
+    assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [(paper, " ".join(texts))]
 
 
 def test_neo4j_concept_neighbours_count_distinct_mesh(neo4j_graph):
@@ -243,8 +239,14 @@ def test_neo4j_concept_neighbours_count_distinct_mesh(neo4j_graph):
     papers = [s1, s2, s3, n1, n2]
     chunks = [(p + "_0", p, p) for p in papers]
     mentions = [
-        (s1, a), (s1, b), (s1, c),
-        (s2, a), (s3, a), (n1, a), (n2, b), (n2, c),
+        (s1, a),
+        (s1, b),
+        (s1, c),
+        (s2, a),
+        (s3, a),
+        (n1, a),
+        (n2, b),
+        (n2, c),
     ]
     _neo4j_merge(driver, papers, chunks, mentions, [a, b, c])
     retriever = Neo4jGraphRetriever(
