@@ -8,6 +8,7 @@ Arms:
     graph           + parent-paper expansion (full abstracts)
     graph_concepts  + MeSH concept-hop expansion
     graph_norr      parent-paper expansion WITHOUT the reranker (hosted demo's config)
+    flat_parent     non-graph full-abstract lookup; negative control for graph
 
 All arms share one ArangoDB-backed chunk corpus (cached locally), the same
 encoder, reranker, prompt, LLM, seed and sample — so results are comparable and
@@ -27,6 +28,7 @@ that don't match.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -38,7 +40,7 @@ import requests
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-ARMS = ("plain", "plain_rr", "graph", "graph_concepts", "graph_norr")
+ARMS = ("plain", "plain_rr", "graph", "graph_concepts", "graph_norr", "flat_parent")
 MAX_TRIES = 3
 CHECKPOINT_EVERY = 25
 
@@ -103,7 +105,7 @@ def ensure_ollama(api_url: str, model: str, restart: bool = False, wait: int = 9
 
 
 def build_retriever(arm, store, encoder, reranker, db):
-    from kgqa.retrieval import GraphRetriever, PlainRetriever
+    from kgqa.retrieval import FlatParentRetriever, GraphRetriever, PlainRetriever
 
     if arm == "plain":
         return PlainRetriever(store, encoder, reranker=None)
@@ -111,6 +113,8 @@ def build_retriever(arm, store, encoder, reranker, db):
         return PlainRetriever(store, encoder, reranker=reranker)
     if arm == "graph":
         return GraphRetriever(store, encoder, db, reranker=reranker, use_concepts=False)
+    if arm == "flat_parent":
+        return FlatParentRetriever(store, encoder, reranker=reranker)
     if arm == "graph_concepts":
         return GraphRetriever(store, encoder, db, reranker=reranker, use_concepts=True)
     if arm == "graph_norr":
@@ -151,6 +155,36 @@ def build_meta(arm: str, seed: int, n_requested: int) -> dict:
         "git_sha": _git_sha(),
         "complete": False,
     }
+
+
+
+def stamp_parent_comparison(meta: dict, samples: list, store) -> None:
+    """Stamp both arms with identical required inputs for an honest contrast.
+
+    The flat baseline needs a newly rerun graph arm -- no historical graph
+    artifact contains this protocol marker. Hash all evaluated sample inputs
+    and *the entire* retrieved corpus rather than assuming the same DB name
+    guarantees identical bytes.
+    """
+    meta["parent_control_protocol"] = "flat-parent-v1"
+    sample_input = [
+        [str(s.pubid), s.question, s.final_decision]
+        for s in samples
+    ]
+    meta["sample_sha256"] = hashlib.sha256(
+        json.dumps(sample_input, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+    digest = hashlib.sha256()
+    for index in sorted(range(len(store.ids)), key=store.ids.__getitem__):
+        for value in (store.ids[index], store.paper_keys[index], store.texts[index]):
+            encoded = str(value).encode("utf-8")
+            digest.update(len(encoded).to_bytes(8, "big"))
+            digest.update(encoded)
+        vector = store.embeddings[index].tobytes()
+        digest.update(len(vector).to_bytes(8, "big"))
+        digest.update(vector)
+    meta["corpus_sha256"] = digest.hexdigest()
 
 
 def check_resume(data: dict, arm: str, seed: int, n_requested: int, sample_ids: list) -> list:
@@ -267,6 +301,8 @@ def main():
     print("[Corpus] Loading chunk store from ArangoDB (cached after first run)...")
     store = ChunkStore.from_arango(db, cache_file=cache_file)
     print(f"[Corpus] {len(store):,} chunks loaded.")
+    if args.arm in ("graph", "flat_parent"):
+        stamp_parent_comparison(meta, samples, store)
 
     encoder = load_encoder()
     reranker = load_reranker() if args.arm not in ("plain", "graph_norr") else None
