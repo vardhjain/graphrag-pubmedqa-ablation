@@ -165,9 +165,7 @@ def test_resume_refuses_parser_or_corpus_drift():
     expected["sample_sha256"] = "a" * 64
     expected["corpus_sha256"] = "b" * 64
     good = {"meta": dict(expected), "ids": ["a"]}
-    assert check_resume(good, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected) == [
-        "a"
-    ]
+    assert check_resume(good, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected) == ["a"]
 
     for field, new_value in (
         ("answer_parser", "legacy-v1"),
@@ -176,9 +174,7 @@ def test_resume_refuses_parser_or_corpus_drift():
     ):
         changed = {"meta": {**expected, field: new_value}, "ids": ["a"]}
         with pytest.raises(ValueError, match=field):
-            check_resume(
-                changed, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected
-            )
+            check_resume(changed, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected)
 
 
 def test_resume_refuses_unversioned_checkpoint_on_new_run():
