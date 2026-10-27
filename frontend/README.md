@@ -10,7 +10,15 @@ the FastAPI service it talks to). Deployed at
 | --- | --- |
 | `/` | The chat itself (`components/ChatPanel.tsx`) — ask a biomedical question, get an answer with cited PubMed IDs and a reasoning-path graph of the retrieval behind it. |
 | `/benchmark` | Reads `../results/summary.json` directly at build time (`lib/results.ts`) and renders the ablation table + McNemar significance tests. Every headline number on `/`, `/benchmark` and `/case-study` is derived from that file (`lib/results.ts`), never typed by hand; a missing Wilson 95% CI is computed from accuracy + sample count. No API calls, no live backend needed. |
+| `/walkthrough` | Three-step interactive, **synthetic** parent-expansion walkthrough. Works without an API or live database; directly links research caveats and relevant implementation files. |
 | `/case-study` | The project's own "confounded demo → fair ablation" narrative, plus the engineering story behind hosting it. |
+
+### Reviewer flow
+
+Start at `/walkthrough` for an offline explanation, continue to `/benchmark`
+for the published historical evidence and caveats, and then visit `/` to
+ask the deployed (different, smaller) demo a real question. The standalone
+[reviewer guide](../REVIEWER_GUIDE.md) includes a five-minute code-review path.
 
 ### Local dev
 

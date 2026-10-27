@@ -5,7 +5,7 @@ import { deriveHeadline, fmtDelta, loadBenchmarkSummary, pWithOperator } from "@
 export const metadata: Metadata = {
   title: "Case study",
   description:
-    "How a confounded GraphRAG-vs-RAG comparison became a fair 4-arm ablation, plus the engineering behind hosting it as a live demo.",
+    "From a confounded GraphRAG comparison to a controlled PubMedQA ablation: methods, deployment decisions, and open limitations.",
 };
 
 const REPO = "https://github.com/vardhjain/graphrag-pubmedqa-ablation";
@@ -37,14 +37,19 @@ export default function CaseStudyPage() {
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold text-zinc-900">Case study</h1>
-            <Link href="/" className="text-sm text-blue-600 hover:underline">
-              &larr; Back to chat
-            </Link>
+            <nav aria-label="Project pages" className="flex flex-wrap gap-4">
+              <Link href="/walkthrough" className="text-sm text-blue-600 hover:underline">
+                3-minute walkthrough
+              </Link>
+              <Link href="/" className="text-sm text-blue-600 hover:underline">
+                &larr; Back to chat
+              </Link>
+            </nav>
           </div>
           <p className="text-sm text-zinc-600 mt-1">
-            Does a knowledge graph actually help retrieval-augmented QA, once you stop
-            cheating? A fair ablation, and the engineering behind turning it into a
-            live agent.
+            Does a knowledge graph help retrieval-augmented QA after accounting
+            for confounding variables? An incremental ablation and the engineering
+            behind a separately hosted agent.
           </p>
         </div>
       </header>
@@ -53,11 +58,11 @@ export default function CaseStudyPage() {
         <Section title="The question">
           <p>
             An earlier version of this project claimed GraphRAG beat plain RAG on
-            PubMedQA. It didn&apos;t hold up: the GraphRAG arm secretly also had a
-            reranker the baseline lacked, pulled from a different corpus, and worst of
-            all, leaked the paper title (and with it, most of the answer) directly into
-            the LLM&apos;s prompt. The &quot;win&quot; was three confounds stacked on
-            top of each other, not a knowledge graph doing anything.
+            PubMedQA. An audit uncovered three confounders: the GraphRAG arm
+            used a reranker missing from the baseline, retrieved from a different
+            corpus, and stored question-derived metadata and the correct answer
+            in a form that could reach the LLM prompt. The original comparison
+            could not isolate the effect of graph traversal.
           </p>
           <p>
             This repo is the fixed version, built to answer the question honestly: with
@@ -86,9 +91,10 @@ export default function CaseStudyPage() {
             </div>
           </div>
           <p>
-            Corpus, chunking, embedder, reranker, prompt, LLM, random seed, sample size,
-            and top-k are identical across all {armCount} arms &mdash; centralized in one
-            config module every arm imports, so nothing can silently diverge. Graph
+            Corpus, chunking, embedder, prompt, LLM, random seed, sample size,
+            and top-k are controlled across the {armCount} arms. The reranker is
+            introduced separately in <code>plain_rr</code> and then held constant
+            for the graph and graph-concept comparison. Graph
             context uses generic <code className="text-xs bg-gray-100 px-1 rounded">=== STUDY n ===</code>{" "}
             labels with no titles and no gold label anywhere near the prompt; a test
             asserts the question string never appears in retrieved context, closing off
@@ -142,6 +148,45 @@ export default function CaseStudyPage() {
               live benchmark page
             </Link>{" "}
             for the numbers behind this page.
+          </p>
+        </Section>
+
+        <Section title="What this experiment does not prove">
+          <ul className="list-disc pl-5 space-y-2">
+            <li>
+              <strong>The historical result needs replication.</strong> The
+              graph used for the published run likely had duplicate
+              HAS_CONTEXT links. A clean rerun and retained per-question outputs
+              are required before treating this as reproducible evidence.
+            </li>
+            <li>
+              <strong>The graph is not isolated from context length.</strong> A
+              flat parent-document baseline given the same full abstracts and
+              token budget has not been tested. The measured improvement may come
+              from more complete context rather than graph structure itself.
+            </li>
+            <li>
+              <strong>Absolute accuracy remains limited.</strong> A majority-yes
+              baseline scored 56.5% on the historical sample, close to the
+              reported graph accuracy. Performance should be interpreted with
+              that baseline and the class-level metrics in mind.
+            </li>
+            <li>
+              <strong>The hosted demo is not this benchmark.</strong> Its
+              retrieval corpus, graph backend, LLM, and reranker configuration
+              differ. Benchmark accuracy cannot be inferred from the demo.
+            </li>
+          </ul>
+          <p>
+            For an interactive explanation that works even when the demo sleeps,
+            visit the{" "}
+            <Link href="/walkthrough" className="text-blue-600 hover:underline">
+              no-backend walkthrough
+            </Link>
+            . Open limitations are tracked in{" "}
+            <a href={`${REPO}/blob/main/GAPS.md`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+              GAPS.md
+            </a>.
           </p>
         </Section>
 
