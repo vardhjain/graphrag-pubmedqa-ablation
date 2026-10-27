@@ -32,6 +32,7 @@ jobs:
 
       - name: Lint (ruff)
         run: |
+          ruff format --diff src/kgqa/retrieval/graph.py tests/integration/test_graph_db_contract.py tests/test_flat_parent.py
           ruff check src scripts tests app backend
           ruff format --check src scripts tests app backend
 
