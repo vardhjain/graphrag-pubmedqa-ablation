@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 
 import pytest
-
 from scripts.compare_parent_baseline import compare_parent_results
 
 
