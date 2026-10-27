@@ -35,12 +35,11 @@ jobs:
           ruff check src scripts tests app backend
           ruff format --check src scripts tests app backend
 
-      - name: Eval regression gate
-        # Blocks the build if results/summary.json (what the /benchmark page and
-        # dashboard read directly, and RESULTS.md / README are hand-copied from)
-        # is ever edited down or regresses -- see tests/test_results_regression.py
-        # for why this doesn't re-run the LLM benchmark itself (needs GPU + ArangoDB).
-        run: pytest tests/test_results_regression.py -v
+      - name: Benchmark artifact integrity
+        # Check schema, sample counts, effect sizes and significance math, not
+        # whether an empirical result is favorable. The LLM benchmark itself
+        # still requires a GPU and ArangoDB and does not run in CI.
+        run: pytest tests/test_results_integrity.py -v
 
       - name: Test (pytest)
         run: pytest --cov=kgqa --cov=graphrag --cov-report=xml --cov-report=term-missing
