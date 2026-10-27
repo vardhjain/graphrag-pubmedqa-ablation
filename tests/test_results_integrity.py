@@ -117,11 +117,7 @@ def validate_summary(data: dict) -> None:
         assert _finite_number(contrast["delta_acc"])
         assert -100 <= contrast["delta_acc"] <= 100
 
-        expected_p = (
-            float(binomtest(gains, gains + losses, 0.5).pvalue)
-            if gains + losses
-            else 1.0
-        )
+        expected_p = float(binomtest(gains, gains + losses, 0.5).pvalue) if gains + losses else 1.0
         assert _probability(contrast["p_value"]), f"{pair}: invalid p-value"
         # The checked-in legacy JSON rounded 5.46e-6 to 0.0000; newer
         # compare.py output retains full precision.
@@ -132,9 +128,7 @@ def validate_summary(data: dict) -> None:
 
         paired_n = contrast.get("paired_n")
         if paired_n is not None:
-            assert _positive_int(paired_n) and paired_n <= max_pairs, (
-                f"{pair}: invalid paired_n"
-            )
+            assert _positive_int(paired_n) and paired_n <= max_pairs, f"{pair}: invalid paired_n"
         else:
             # Legacy summaries omit paired_n. Only infer it when neither
             # arm failed and both cover the summary's full sample.
