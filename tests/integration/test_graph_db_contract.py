@@ -218,7 +218,6 @@ def test_neo4j_parent_abstract_has_numerical_section_order(neo4j_graph):
     assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [(paper, " ".join(texts))]
 
 
-
 def test_arango_parent_deduplicates_legacy_edges(arango_db):
     """Repeated HAS_CONTEXT paths should never repeat abstract sections."""
     ingest_split(
@@ -235,9 +234,7 @@ def test_arango_parent_deduplicates_legacy_edges(arango_db):
         }
     )
     retriever = GraphRetriever(store=None, encoder=None, db=arango_db)
-    assert retriever._parent_abstracts(["Chunks/legacy_0"]) == [
-        ("legacy", "methods results")
-    ]
+    assert retriever._parent_abstracts(["Chunks/legacy_0"]) == [("legacy", "methods results")]
 
 
 def test_arango_concept_hop_orders_sections_numerically(arango_db):
@@ -251,8 +248,11 @@ def test_arango_concept_hop_orders_sections_numerically(arango_db):
         batch_size=1,
     )
     retriever = GraphRetriever(
-        store=None, encoder=None, db=arango_db,
-        use_concepts=True, concept_hop_papers=1,
+        store=None,
+        encoder=None,
+        db=arango_db,
+        use_concepts=True,
+        concept_hop_papers=1,
     )
     assert retriever._concept_neighbours(["seed"]) == [
         ("neighbor", " ".join(f"part{i}" for i in range(12)))
@@ -263,19 +263,20 @@ def test_neo4j_parent_deduplicates_legacy_edges(neo4j_graph):
     driver, prefix = neo4j_graph
     paper = prefix + "legacy"
     _neo4j_merge(
-        driver, [paper], [(f"{paper}_0", paper, "methods"), (f"{paper}_1", paper, "results")],
-        [], [],
+        driver,
+        [paper],
+        [(f"{paper}_0", paper, "methods"), (f"{paper}_1", paper, "results")],
+        [],
+        [],
     )
     with driver.session() as session:
         session.run(
-            "MATCH (p:Paper {key: $paper}), (c:Chunk {key: $chunk}) "
-            "CREATE (p)-[:HAS_CONTEXT]->(c)",
-            paper=paper, chunk=f"{paper}_0",
+            "MATCH (p:Paper {key: $paper}), (c:Chunk {key: $chunk}) CREATE (p)-[:HAS_CONTEXT]->(c)",
+            paper=paper,
+            chunk=f"{paper}_0",
         ).consume()
     retriever = Neo4jGraphRetriever(store=None, encoder=None, driver=driver)
-    assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [
-        (paper, "methods results")
-    ]
+    assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [(paper, "methods results")]
 
 
 def test_neo4j_concept_hop_orders_sections_numerically(neo4j_graph):
@@ -285,12 +286,18 @@ def test_neo4j_concept_hop_orders_sections_numerically(neo4j_graph):
         (f"{neighbour}_{i}", neighbour, f"part{i}") for i in range(12)
     ]
     _neo4j_merge(
-        driver, [seed, neighbour], chunks,
-        [(seed, concept), (neighbour, concept)], [concept],
+        driver,
+        [seed, neighbour],
+        chunks,
+        [(seed, concept), (neighbour, concept)],
+        [concept],
     )
     retriever = Neo4jGraphRetriever(
-        store=None, encoder=None, driver=driver,
-        use_concepts=True, concept_hop_papers=1,
+        store=None,
+        encoder=None,
+        driver=driver,
+        use_concepts=True,
+        concept_hop_papers=1,
     )
     assert retriever._concept_neighbours([seed]) == [
         (neighbour, " ".join(f"part{i}" for i in range(12)))
