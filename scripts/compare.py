@@ -6,10 +6,11 @@ Reads results/{arm}_results.json for whichever arms are present and writes
 figures + a markdown snippet to results/. The McNemar tests are paired on pubid,
 so they only run for arms evaluated on the same seeded sample.
 
-Result files written by run_benchmark.py carry a ``meta`` block. When present,
-it is checked: an incomplete run, or one whose seed / LLM model / n differs
-from the other arms, is loudly flagged and left out of the significance tests.
-Files without ``meta`` (older runs) are accepted as-is.
+Result files written by run_benchmark.py carry a ``meta`` block.
+Protocol-v2 comparisons require matching parser, evaluation questions,
+retrieval corpus, models, prompt, generation settings, and source revision.
+Purely legacy results can still be compared with the historical checks, but
+mixing legacy and v2 files is rejected from significance tests.
 """
 
 from __future__ import annotations
@@ -64,34 +65,65 @@ def load_results(results_dir: str | None = None):
     return out
 
 
+# Required in every new-format checkpoint; a missing field cannot be
+# interpreted as "same" when the published conclusion depends on fairness.
+PROTOCOL_KEYS = (
+    "protocol_version", "answer_parser", "sample_sha256", "corpus_sha256",
+    "prompt_sha256", "dataset_name", "embedding_model", "reranker_model",
+    "llm_model", "seed", "n_requested", "num_ctx", "num_predict",
+    "temperature", "top_k", "top_k_candidates", "git_sha",
+)
+
+
 def _run_key(r: dict):
     meta = r.get("meta") or {}
+    if meta.get("protocol_version") == 2:
+        return tuple(meta.get(k) for k in PROTOCOL_KEYS)
     return (meta.get("seed"), meta.get("llm_model"), meta.get("n_requested"))
 
 
 def check_runs(results: dict) -> tuple[set, list[str]]:
-    """Return (arms to exclude from significance tests, warning messages).
+    """Exclude incomplete, incompatible, or untraceable arms from paired tests.
 
-    Excluded: any arm whose meta says complete=False, or whose
-    (seed, llm_model, n_requested) differs from the most common one among
-    arms that carry meta. Arms without meta (legacy files) are never excluded.
+    Two legacy files are allowed under the original seed/model/n contract.
+    Protocol-v2 files require matching immutable run provenance, and must
+    never be compared with legacy runs that lack the same evidence.
     """
     excluded, warnings = set(), []
-    with_meta = {a: r for a, r in results.items() if r.get("meta")}
-    for arm, r in with_meta.items():
-        if r["meta"].get("complete") is False:
+    modern = {
+        arm: result
+        for arm, result in results.items()
+        if (result.get("meta") or {}).get("protocol_version") == 2
+    }
+    if modern:
+        for arm, result in results.items():
+            meta = result.get("meta") or {}
+            if meta.get("protocol_version") != 2:
+                excluded.add(arm)
+                warnings.append(f"{arm}: legacy metadata cannot be paired with protocol-v2 runs")
+                continue
+            missing = [key for key in PROTOCOL_KEYS if meta.get(key) is None]
+            if missing:
+                excluded.add(arm)
+                warnings.append(f"{arm}: missing provenance fields {', '.join(missing)}")
+    for arm, result in results.items():
+        meta = result.get("meta") or {}
+        if meta.get("complete") is False:
             excluded.add(arm)
             warnings.append(
-                f"{arm}: INCOMPLETE run ({r['meta'].get('n_done')}/"
-                f"{r['meta'].get('n_requested')} done)"
+                f"{arm}: INCOMPLETE run ({meta.get('n_done')}/{meta.get('n_requested')} done)"
             )
-    keys = [_run_key(r) for r in with_meta.values()]
-    if keys:
-        ref = Counter(keys).most_common(1)[0][0]
-        for arm, r in with_meta.items():
-            if _run_key(r) != ref:
+    eligible = {
+        arm: result
+        for arm, result in results.items()
+        if arm not in excluded and result.get("meta")
+    }
+    if eligible:
+        ref = Counter(_run_key(result) for result in eligible.values()).most_common(1)[0][0]
+        for arm, result in eligible.items():
+            if _run_key(result) != ref:
                 excluded.add(arm)
-                warnings.append(f"{arm}: (seed, model, n)={_run_key(r)} != other arms' {ref}")
+                warnings.append(f"{arm}: provenance differs from other arms")
     return excluded, warnings
 
 
@@ -163,6 +195,8 @@ def aligned(a, b):
     """
     ids_a = a.get("ids") or list(range(len(a["y_pred"])))
     ids_b = b.get("ids") or list(range(len(b["y_pred"])))
+    if len(set(ids_a)) != len(ids_a) or len(set(ids_b)) != len(ids_b):
+        raise ValueError("Duplicate sample IDs prevent reliable pairing")
     failed_a = a.get("failed") or [False] * len(ids_a)
     failed_b = b.get("failed") or [False] * len(ids_b)
     idx_b = {sid: i for i, sid in enumerate(ids_b)}
@@ -173,6 +207,8 @@ def aligned(a, b):
         j = idx_b.get(sid)
         if j is None or failed_b[j]:
             continue
+        if a["y_true"][i] != b["y_true"][j]:
+            raise ValueError(f"Ground-truth mismatch for sample id {sid!r}")
         gt.append(a["y_true"][i])
         pa.append(a["y_pred"][i])
         pb.append(b["y_pred"][j])
@@ -208,6 +244,7 @@ def main():
         acc, f1 = r["accuracy"] * 100, r.get("macro_f1", 0) * 100
         lat, n = r["avg_latency"], r["samples"]
         n_failed = r.get("n_failed", 0)
+        n_invalid = r.get("n_invalid", 0)
         recall_k = r.get("recall_at_k")  # None for result JSONs predating this metric
         recall_display = f"{recall_k * 100:.1f}%" if recall_k is not None else "n/a"
         ci_lo, ci_hi = wilson_ci(r["accuracy"], n)
@@ -232,6 +269,7 @@ def main():
                 "avg_latency": round(lat, 1),
                 "samples": n,
                 "n_failed": n_failed,
+                "n_invalid": n_invalid,
                 **{k: r[k] for k in ("n_degraded", "n_truncated") if k in r},
                 **({"complete": r["meta"].get("complete")} if r.get("meta") else {}),
                 **({"excluded_from_tests": True} if arm in excluded else {}),
@@ -307,6 +345,7 @@ def main():
                 "delta_acc": round(d, 2),
                 "gains": test["b_gains"],
                 "losses": test["c_losses"],
+                "paired_n": len(aligned(results[r["a_name"]], results[r["b_name"]])[0]),
                 # Full precision, not rounded to 4dp -- a real
                 # p~5.5e-6 must not collapse to the literal 0.0.
                 "p_value": test["p_value"],
