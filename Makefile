@@ -50,8 +50,8 @@ benchmark-parent-control:  ## Optional fresh paired graph/flat runs; local Ollam
 	@export LLM_NUM_CTX=8192; \
 	python scripts/check_parent_parity.py --n 100 --seed 42 && \
 	for arm in graph flat_parent; do \
-		echo "===== $arm (fresh parent control) ====="; \
-		python scripts/run_benchmark.py --arm $arm --n 200 --output results/parent_control/${arm}_results.json || exit 1; \
+		echo "===== $$arm (fresh parent control) ====="; \
+		python scripts/run_benchmark.py --arm $$arm --n 200 --output results/parent_control/$${arm}_results.json || exit 1; \
 	done; \
 	python scripts/compare_parent_baseline.py \
 		--flat results/parent_control/flat_parent_results.json \
