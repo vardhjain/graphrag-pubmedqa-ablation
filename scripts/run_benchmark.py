@@ -187,6 +187,19 @@ def stamp_parent_comparison(meta: dict, samples: list, store) -> None:
     meta["corpus_sha256"] = digest.hexdigest()
 
 
+def check_parent_control_resume(data: dict, expected: dict) -> None:
+    """Never resume a graph/flat contrast with changed experimental inputs."""
+    actual = data.get("meta") or {}
+    fields = (
+        "parent_control_protocol", "sample_sha256", "corpus_sha256",
+        "llm_model", "num_ctx", "num_predict", "temperature",
+        "top_k", "top_k_candidates", "git_sha",
+    )
+    for key in fields:
+        if key not in actual or actual[key] != expected.get(key):
+            raise ValueError(f"Checkpoint {key} differs from the paired experiment")
+
+
 def check_resume(data: dict, arm: str, seed: int, n_requested: int, sample_ids: list) -> list:
     """Validate a .partial checkpoint against this run; return its done ids.
 
@@ -303,6 +316,8 @@ def main():
     print(f"[Corpus] {len(store):,} chunks loaded.")
     if args.arm in ("graph", "flat_parent"):
         stamp_parent_comparison(meta, samples, store)
+        if args.resume and os.path.exists(partial_path):
+            check_parent_control_resume(data, meta)
 
     encoder = load_encoder()
     reranker = load_reranker() if args.arm not in ("plain", "graph_norr") else None
