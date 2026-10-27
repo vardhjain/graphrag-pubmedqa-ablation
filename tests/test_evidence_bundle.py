@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from scripts.evidence_bundle import export_bundle, verify_bundle
 
 
