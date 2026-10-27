@@ -319,10 +319,12 @@ def test_compare_rejects_missing_v2_provenance():
 def test_compare_accepts_matching_v2_provenance():
     from scripts.compare import check_runs
 
-    excluded, warnings = check_runs({
-        "plain": {"meta": _v2_meta("plain")},
-        "graph": {"meta": _v2_meta("graph")},
-    })
+    excluded, warnings = check_runs(
+        {
+            "plain": {"meta": _v2_meta("plain")},
+            "graph": {"meta": _v2_meta("graph")},
+        }
+    )
     assert excluded == set()
     assert warnings == []
 
@@ -341,7 +343,11 @@ def test_pairing_rejects_inconsistent_labels_and_duplicate_ids():
 
 def test_compare_records_invalid_outputs_separately(tmp_path, monkeypatch):
     _write_arm(
-        tmp_path, "plain", ["invalid", "no", "yes", "no"], TRUTH, _meta("plain"),
+        tmp_path,
+        "plain",
+        ["invalid", "no", "yes", "no"],
+        TRUTH,
+        _meta("plain"),
         n_invalid=1,
     )
     out = _run_main(tmp_path, monkeypatch)
