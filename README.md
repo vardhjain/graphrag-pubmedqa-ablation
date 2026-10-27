@@ -299,3 +299,30 @@ If this project is useful in your work, please cite it using
 ## 📄 License
 
 [MIT](LICENSE)
+
+
+### Database integration tests (no cloud credentials)
+
+The regular unit test suite uses fakes for speed. A separate [graph database
+integration workflow](.github/workflows/graph-integration.yml) executes the
+**real AQL and Cypher** with disposable, synthetic records in localhost-only
+ArangoDB 3.11 and Neo4j 5.26 Docker containers. It checks edge idempotence,
+label leakage, parent-abstract expansion, and shared MeSH concept ranking.
+Existing numerical section-ordering defects and the Arango shared-concept
+counting discrepancy are tracked as **strict expected failures** (`xfail`),
+not silently patched into the previously benchmarked retrieval pipeline.
+
+To reproduce these tests on a local machine with Docker installed:
+
+```bash
+docker run -d --rm --name kgqa-test-arango -p 127.0.0.1:8529:8529 -e ARANGO_ROOT_PASSWORD=integration_only_password arangodb:3.11
+docker run -d --rm --name kgqa-test-neo4j -p 127.0.0.1:7687:7687 -e NEO4J_AUTH=neo4j/integration_only_password neo4j:5.26
+python -m pip install pytest numpy requests tqdm "python-arango>=8,<9" "neo4j>=5,<6"
+KGQA_RUN_DB_INTEGRATION=1 pytest -ra tests/integration/test_graph_db_contract.py
+docker rm -f kgqa-test-arango kgqa-test-neo4j
+```
+
+These tests refuse non-local database URLs and do not download the
+PubMedQA corpus, LLM weights, or hosted database credentials. They are
+**integration tests, not an accuracy benchmark**; resolving the expected
+failures in benchmark AQL still requires a fresh reproducible benchmark.
