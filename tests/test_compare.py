@@ -189,7 +189,7 @@ def _run_main(tmp_path, monkeypatch):
     import scripts.compare as compare
 
     monkeypatch.setattr(compare, "RESULTS_DIR", str(tmp_path))
-    monkeypatch.setattr(compare, "_plot", lambda results: None)
+    monkeypatch.setattr(compare, "_plot", lambda results, output_dir=None: None)
     compare.main()
     return json.loads((tmp_path / "summary.json").read_text())
 
@@ -375,3 +375,51 @@ def test_compare_records_paired_n_after_failed_calls(tmp_path, monkeypatch):
     )
     out = _run_main(tmp_path, monkeypatch)
     assert out["contrasts"][0]["paired_n"] == 3
+
+
+def test_compare_can_write_fresh_analysis_without_touching_historical_results(
+    tmp_path, monkeypatch
+):
+    import json
+
+    import pytest
+
+    import scripts.compare as compare
+
+    historical = tmp_path / "results"
+    historical.mkdir()
+    original = historical / "summary.json"
+    original.write_text('{"historical": true}', encoding="utf-8")
+
+    fresh = tmp_path / "new-run"
+    fresh.mkdir()
+    analysis = fresh / "analysis"
+    _write_arm(fresh, "plain", ["yes", "no", "yes", "no"], TRUTH, _meta("plain"))
+    _write_arm(fresh, "plain_rr", ["yes", "no", "yes", "yes"], TRUTH, _meta("plain_rr"))
+
+    monkeypatch.setattr(compare, "ROOT", str(tmp_path))
+    monkeypatch.setattr(compare, "RESULTS_DIR", str(historical))
+    monkeypatch.setattr(compare, "_plot", lambda results, output_dir=None: None)
+
+    compare.main(results_dir=str(fresh), output_dir=str(analysis))
+    summary = json.loads((analysis / "summary.json").read_text(encoding="utf-8"))
+    assert len(summary["arms"]) == 2
+    assert (analysis / "summary.md").exists()
+    assert original.read_text(encoding="utf-8") == '{"historical": true}'
+
+    with pytest.raises(ValueError, match="Refusing to overwrite"):
+        compare.main(results_dir=str(fresh), output_dir=str(historical))
+    assert original.read_text(encoding="utf-8") == '{"historical": true}'
+
+
+def test_compare_defaults_new_outputs_to_input_directory(tmp_path, monkeypatch):
+    import scripts.compare as compare
+
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    _write_arm(fresh, "plain", ["yes", "no", "yes", "no"], TRUTH, _meta("plain"))
+    monkeypatch.setattr(compare, "_plot", lambda results, output_dir=None: None)
+
+    compare.main(results_dir=str(fresh))
+    assert (fresh / "summary.json").exists()
+    assert (fresh / "summary.md").exists()
