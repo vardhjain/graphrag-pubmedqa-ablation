@@ -32,6 +32,11 @@ to try the separate smaller hosted system (free-tier cold starts can take minute
 engineering decisions, what was actually measured, and what still needs
 experimental validation.
 
+**[Clean benchmark reproducibility checklist](CLEAN_RUN_CHECKLIST.md)** —
+read-only graph audit, context parity, an optional future local Ollama rerun,
+strict provenance checks, and **isolated analysis files** that preserve the
+published historical summary.
+
 ## 👋 The short version
 
 AI assistants answer questions more reliably when they first look up relevant

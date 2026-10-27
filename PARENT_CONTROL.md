@@ -57,7 +57,8 @@ that accepts negative and non-significant results.
 
 ```bash
 # Point ARANGO_HOST, ARANGO_USER, ARANGO_PASS, ARANGO_DB at the repaired graph.
-python scripts/ingest.py --check-duplicates
+python scripts/audit_graph.py --report results/graph_audit.json
+# Exit nonzero? Stop and repair the database; do not bypass a failed audit.
 make check-parent-parity
 # Or sample a larger set:
 python scripts/check_parent_parity.py --n 1000 --seed 42
@@ -132,6 +133,7 @@ complete comparison accordingly.
   in-memory indexed lookup separately from LLM generation and full-pipeline
   latency. Equal-context accuracy does not imply equal operational cost.
 
-**Published numbers remain historical and unchanged.** This PR contains no
-new benchmark outcomes, makes no new performance claim, and uses only
-no-GPU/no-LLM tests in CI.
+**Published numbers remain historical and unchanged.** Query corrections
+and the non-graph control are implemented and tested, but no new accuracy
+benchmark has been run. Follow [CLEAN_RUN_CHECKLIST.md](CLEAN_RUN_CHECKLIST.md)
+for the full clean-data, free-compute-optional evaluation process.
