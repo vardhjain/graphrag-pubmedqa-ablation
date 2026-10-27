@@ -51,9 +51,9 @@ PAIRS = (
 
 
 def _encoded(data: dict) -> bytes:
-    return (json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(",", ":")) + "\n").encode(
-        "utf-8"
-    )
+    return (
+        json.dumps(data, sort_keys=True, ensure_ascii=False, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
 
 
 def _sha(data: bytes) -> str:
@@ -103,15 +103,16 @@ def _rows(data: dict, arm: str) -> tuple[list[dict], list[str]]:
             row[field] = value
         value = data["latencies"][i] if "latencies" in available else None
         if value is not None and (
-            isinstance(value, bool) or not isinstance(value, (int, float))
-            or not math.isfinite(value) or value < 0
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
         ):
             raise ValueError(f"{arm}: invalid latency for {sample_id}")
         row["latency_seconds"] = value
         retrieved = data["retrieved_papers"][i] if "retrieved_papers" in available else None
         if retrieved is not None and (
-            not isinstance(retrieved, list)
-            or any(not isinstance(p, str) for p in retrieved)
+            not isinstance(retrieved, list) or any(not isinstance(p, str) for p in retrieved)
         ):
             raise ValueError(f"{arm}: invalid retrieved_papers for {sample_id}")
         row["retrieved_papers"] = retrieved
@@ -149,8 +150,12 @@ def _mcnemar(rows_a: list[dict], rows_b: list[dict]) -> dict:
         raise ValueError("No valid paired observations")
     discordant = gains + losses
     p = (
-        min(1.0, 2 * sum(math.comb(discordant, i) for i in range(min(gains, losses) + 1))
-            / 2**discordant)
+        min(
+            1.0,
+            2
+            * sum(math.comb(discordant, i) for i in range(min(gains, losses) + 1))
+            / 2**discordant,
+        )
         if discordant
         else 1.0
     )
@@ -186,7 +191,9 @@ def _comparability(arms: dict[str, dict]) -> tuple[bool, list[str]]:
 def export_bundle(source_dir: Path, destination: Path) -> dict:
     paths = sorted(source_dir.glob("*_results.json"))
     if not paths:
-        raise ValueError("No *_results.json found. Published summary.json has no per-question data.")
+        raise ValueError(
+            "No *_results.json found. Published summary.json has no per-question data."
+        )
     if destination.resolve() == source_dir.resolve():
         raise ValueError("Output directory must differ from input directory")
     arms: dict[str, dict] = {}
