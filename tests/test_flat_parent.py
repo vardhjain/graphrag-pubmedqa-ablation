@@ -154,7 +154,14 @@ def test_resume_rejects_different_parent_comparison_inputs(fake_encoder):
     expected = {"llm_model": "test", "num_ctx": 8192, "num_predict": 100}
     store = _store(fake_encoder)
     stamp_parent_comparison(expected, [], store)
-    expected.update(temperature=0.0, top_k=3, top_k_candidates=75, git_sha="abc")
+    expected.update(
+        temperature=0.0,
+        top_k=3,
+        top_k_candidates=75,
+        git_sha="abc",
+        answer_parser="strict-v2",
+        prompt_sha256="a" * 64,
+    )
     check_parent_control_resume({"meta": dict(expected)}, expected)
 
     mismatched = {"meta": {**expected, "corpus_sha256": "different"}}
