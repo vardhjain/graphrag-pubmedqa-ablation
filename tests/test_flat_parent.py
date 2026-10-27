@@ -154,3 +154,17 @@ def test_contexts_use_identical_llm_prompt_template(fake_encoder):
         graph._build_context(question, candidates), question
     ) == build_prompt(flat._build_context(question, candidates), question)
     assert "Final Answer" in BENCHMARK_SYSTEM_PROMPT
+
+
+def test_resume_rejects_different_parent_comparison_inputs(fake_encoder):
+    from scripts.run_benchmark import check_parent_control_resume
+
+    expected = {"llm_model": "test", "num_ctx": 8192, "num_predict": 100}
+    store = _store(fake_encoder)
+    stamp_parent_comparison(expected, [], store)
+    expected.update(temperature=0.0, top_k=3, top_k_candidates=75, git_sha="abc")
+    check_parent_control_resume({"meta": dict(expected)}, expected)
+
+    mismatched = {"meta": {**expected, "corpus_sha256": "different"}}
+    with pytest.raises(ValueError, match="corpus_sha256"):
+        check_parent_control_resume(mismatched, expected)
