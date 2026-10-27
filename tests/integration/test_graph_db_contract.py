@@ -14,7 +14,6 @@ from urllib.parse import urlparse
 
 import numpy as np
 import pytest
-
 from scripts.ingest import ingest_split, setup_schema
 from scripts.ingest_neo4j import (
     _MERGE_CHUNKS,
