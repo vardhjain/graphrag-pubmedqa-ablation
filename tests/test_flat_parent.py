@@ -81,8 +81,6 @@ def test_parent_baseline_orders_sections_numerically_with_graph(fake_encoder):
     assert got != " ".join(texts[i] for i in sorted(range(12), key=lambda i: ids[i]))
 
 
-
-
 def test_flat_parent_rejects_non_numeric_section_ids(fake_encoder):
     store = _store(fake_encoder)
     store.ids[0] = "Chunks/b_footnote"
