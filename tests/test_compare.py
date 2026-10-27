@@ -238,6 +238,7 @@ def test_compare_main_pins_summary_json_key_contract(tmp_path, monkeypatch):
         "gains",
         "losses",
         "p_value",
+        "paired_n",
         "p_display",
         "p_holm",
         "p_holm_display",
@@ -247,6 +248,7 @@ def test_compare_main_pins_summary_json_key_contract(tmp_path, monkeypatch):
         assert contrast_keys <= set(c)
     c = next(c for c in out["contrasts"] if c["to"] == "graph")
     assert c["delta_acc"] == 25.0 and c["gains"] == 1 and c["losses"] == 0
+    assert c["paired_n"] == 4
     # Holm is over the full pre-declared family (missing contrasts at p=1).
     assert c["p_holm"] == min(1.0, c["p_value"] * len(CONTRASTS))
 
@@ -352,3 +354,24 @@ def test_compare_records_invalid_outputs_separately(tmp_path, monkeypatch):
     )
     out = _run_main(tmp_path, monkeypatch)
     assert out["arms"][0]["n_invalid"] == 1
+
+
+def test_compare_records_paired_n_after_failed_calls(tmp_path, monkeypatch):
+    _write_arm(
+        tmp_path,
+        "plain",
+        ["no", "no", "no", "no"],
+        TRUTH,
+        _meta("plain"),
+        failed=[False, True, False, False],
+    )
+    _write_arm(
+        tmp_path,
+        "plain_rr",
+        ["yes", "no", "no", "no"],
+        TRUTH,
+        _meta("plain_rr"),
+        failed=[False, False, False, False],
+    )
+    out = _run_main(tmp_path, monkeypatch)
+    assert out["contrasts"][0]["paired_n"] == 3
