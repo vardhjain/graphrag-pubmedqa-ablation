@@ -168,7 +168,6 @@ def build_meta(arm: str, seed: int, n_requested: int, parser: str = "strict") ->
     }
 
 
-
 def stamp_parent_comparison(meta: dict, samples: list, store) -> None:
     """Record v1 graph-versus-flat protocol, reusing v2 provenance hashes."""
     from kgqa.provenance import corpus_fingerprint, sample_fingerprint
