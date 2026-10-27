@@ -13,11 +13,24 @@
 [![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 [![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
-[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results**](#-results) &nbsp;·&nbsp; [**How it works**](#-how-the-experiment-works) &nbsp;·&nbsp; [**Run it yourself**](#-run-it-yourself) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
+[**🎯 3-minute walkthrough**](https://graphrag-pubmedqa-ablation.vercel.app/walkthrough) &nbsp;·&nbsp; [**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results**](#-results) &nbsp;·&nbsp; [**How it works**](#-how-the-experiment-works) &nbsp;·&nbsp; [**Run it yourself**](#-run-it-yourself) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 
 Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
 
 </div>
+
+## Start here: review the project in three minutes
+
+**[Interactive walkthrough](https://graphrag-pubmedqa-ablation.vercel.app/walkthrough)**
+— see exactly how a retrieved chunk becomes a full-paper context, using a clearly
+labeled **synthetic example**. No account, backend, or model download required.
+Then open the [benchmark](https://graphrag-pubmedqa-ablation.vercel.app/benchmark)
+for the historical measured results or [live chat](https://graphrag-pubmedqa-ablation.vercel.app)
+to try the separate smaller hosted system (free-tier cold starts can take minutes).
+
+**[Five-minute reviewer guide](REVIEWER_GUIDE.md)** — direct code links, the
+engineering decisions, what was actually measured, and what still needs
+experimental validation.
 
 ## 👋 The short version
 
