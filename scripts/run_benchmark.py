@@ -157,7 +157,6 @@ def build_meta(arm: str, seed: int, n_requested: int) -> dict:
     }
 
 
-
 def stamp_parent_comparison(meta: dict, samples: list, store) -> None:
     """Stamp both arms with identical required inputs for an honest contrast.
 
@@ -167,10 +166,7 @@ def stamp_parent_comparison(meta: dict, samples: list, store) -> None:
     guarantees identical bytes.
     """
     meta["parent_control_protocol"] = "flat-parent-v1"
-    sample_input = [
-        [str(s.pubid), s.question, s.final_decision]
-        for s in samples
-    ]
+    sample_input = [[str(s.pubid), s.question, s.final_decision] for s in samples]
     meta["sample_sha256"] = hashlib.sha256(
         json.dumps(sample_input, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
@@ -191,9 +187,16 @@ def check_parent_control_resume(data: dict, expected: dict) -> None:
     """Never resume a graph/flat contrast with changed experimental inputs."""
     actual = data.get("meta") or {}
     fields = (
-        "parent_control_protocol", "sample_sha256", "corpus_sha256",
-        "llm_model", "num_ctx", "num_predict", "temperature",
-        "top_k", "top_k_candidates", "git_sha",
+        "parent_control_protocol",
+        "sample_sha256",
+        "corpus_sha256",
+        "llm_model",
+        "num_ctx",
+        "num_predict",
+        "temperature",
+        "top_k",
+        "top_k_candidates",
+        "git_sha",
     )
     for key in fields:
         if key not in actual or actual[key] != expected.get(key):
