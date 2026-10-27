@@ -41,6 +41,29 @@ class FuzzyEvaluator:
         return matches[-1] if matches else "maybe"
 
 
+STRICT_PARSER_VERSION = "strict-v2"
+LEGACY_PARSER_VERSION = "legacy-v1"
+
+
+class StrictAnswerParser:
+    """Only accept an explicit, unambiguous final verdict on its own line.
+
+    Unlike the historical fuzzy scorer, absence of a verdict returns None.
+    A missing response cannot be silently promoted to the gold 'maybe' label.
+    """
+
+    _FINAL = re.compile(
+        r"^\s*final answer\s*:\s*(yes|no|maybe)\s*[.!]?\s*$",
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    _THINK = re.compile(r"<think>.*?(?:</think>|\Z)", flags=re.IGNORECASE | re.DOTALL)
+
+    def extract_answer(self, text: str) -> str | None:
+        clean = self._THINK.sub("", text or "")
+        matches = [m.group(1).lower() for m in self._FINAL.finditer(clean)]
+        return matches[0] if matches and len(set(matches)) == 1 else None
+
+
 @dataclass
 class Evaluator:
     """Accumulates predictions and computes plot-free metrics.
@@ -73,6 +96,9 @@ class Evaluator:
     # to raw chunks / LLM output hit the generation cap. Absent in old files.
     degraded: list = field(default_factory=list)
     truncated: list = field(default_factory=list)
+    # Strict scoring uses 'invalid' (always incorrect) instead of silently
+    # mapping unparseable output onto the legitimate 'maybe' label.
+    invalid: list = field(default_factory=list)
     # Optional run metadata (arm, seed, model, ...). Omitted from the saved
     # JSON when empty so old-format consumers see exactly the old keys.
     meta: dict = field(default_factory=dict)
@@ -87,9 +113,12 @@ class Evaluator:
         retrieved_papers: list | None = None,
         degraded: bool = False,
         truncated: bool = False,
+        invalid: bool = False,
     ) -> None:
         pred = prediction.lower().strip()
-        if pred not in LABELS:
+        if invalid:
+            pred = "invalid"
+        elif pred not in LABELS:
             pred = "maybe"
         self.y_true.append(ground_truth.lower().strip())
         self.y_pred.append(pred)
@@ -99,9 +128,13 @@ class Evaluator:
         self.retrieved_papers.append(retrieved_papers or [])
         self.degraded.append(bool(degraded))
         self.truncated.append(bool(truncated))
+        self.invalid.append(bool(invalid))
 
     def n_failed(self) -> int:
         return sum(self.failed)
+
+    def n_invalid(self) -> int:
+        return sum(self.invalid)
 
     def recall_at_k(self) -> float:
         """Fraction of (non-failed) samples where the gold paper -- the
@@ -142,6 +175,7 @@ class Evaluator:
             "macro_f1": self.macro_f1(),
             "samples": len(self.y_true),
             "n_failed": self.n_failed(),
+            "n_invalid": self.n_invalid(),
             "recall_at_k": self.recall_at_k(),
             "total_time": sum(self.latencies),
             "avg_latency": self.avg_latency(),
@@ -153,6 +187,7 @@ class Evaluator:
             "retrieved_papers": self.retrieved_papers,
             "degraded": self.degraded,
             "truncated": self.truncated,
+            "invalid": self.invalid,
             "n_degraded": sum(self.degraded),
             "n_truncated": sum(self.truncated),
             **({"meta": self.meta} if self.meta else {}),
@@ -166,6 +201,8 @@ class Evaluator:
         print(f"  {self.model_name} — Evaluation Report")
         print(f"{'=' * 52}")
         print(f"  Samples   : {len(self.y_true)}")
+        if self.n_invalid():
+            print(f"  Invalid  : {self.n_invalid()} (unparseable outputs; counted as wrong)")
         if self.n_failed():
             print(
                 f"  Failed    : {self.n_failed()} (recorded as 'maybe'; "
@@ -203,6 +240,7 @@ class Evaluator:
         ev.retrieved_papers = list(data.get("retrieved_papers") or [[] for _ in range(n)])
         ev.degraded = list(data.get("degraded") or [False] * n)
         ev.truncated = list(data.get("truncated") or [False] * n)
+        ev.invalid = list(data.get("invalid") or [False] * n)
         # Per-sample latencies aren't saved; spread the total so avg is preserved.
         avg = data.get("avg_latency", 0.0)
         ev.latencies = list(data.get("latencies") or [avg] * n)

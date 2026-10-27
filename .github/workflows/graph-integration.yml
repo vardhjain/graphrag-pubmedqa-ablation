@@ -1,0 +1,68 @@
+name: Graph database integration
+
+# Real AQL and Cypher checks with disposable Docker databases and synthetic
+# data only. These do not require GPUs, LLMs, cloud DBs, or paid services.
+on:
+  pull_request:
+    paths:
+      - "tests/integration/**"
+      - "scripts/ingest.py"
+      - "scripts/ingest_neo4j.py"
+      - "src/kgqa/retrieval/**"
+      - "pyproject.toml"
+      - ".github/workflows/graph-integration.yml"
+  push:
+    branches: [main]
+    paths:
+      - "tests/integration/**"
+      - "scripts/ingest.py"
+      - "scripts/ingest_neo4j.py"
+      - "src/kgqa/retrieval/**"
+      - "pyproject.toml"
+      - ".github/workflows/graph-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  graph-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      arangodb:
+        image: arangodb:3.11
+        env:
+          ARANGO_ROOT_PASSWORD: integration_only_password
+        ports:
+          - 8529:8529
+      neo4j:
+        image: neo4j:5.26
+        env:
+          NEO4J_AUTH: neo4j/integration_only_password
+        ports:
+          - 7687:7687
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install lightweight integration dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest numpy requests tqdm "python-arango>=8,<9" "neo4j>=5,<6"
+
+      - name: Test actual AQL and Cypher without external credentials
+        env:
+          KGQA_RUN_DB_INTEGRATION: "1"
+          KGQA_TEST_ARANGO_URL: http://127.0.0.1:8529
+          KGQA_TEST_ARANGO_PASSWORD: integration_only_password
+          KGQA_TEST_NEO4J_URI: bolt://127.0.0.1:7687
+          KGQA_TEST_NEO4J_PASSWORD: integration_only_password
+        run: pytest -ra -v tests/integration/test_graph_db_contract.py

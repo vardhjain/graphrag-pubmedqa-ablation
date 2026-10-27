@@ -1,7 +1,7 @@
 ---
 ---
 
-[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/graphrag-pubmedqa-ablation) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)
+[**🎯 Walkthrough (no backend)**](https://graphrag-pubmedqa-ablation.vercel.app/walkthrough) &nbsp;·&nbsp; [**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app) &nbsp;·&nbsp; [**GitHub repo**](https://github.com/vardhjain/graphrag-pubmedqa-ablation) &nbsp;·&nbsp; [**Project report (PDF)**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Project_Report.pdf) &nbsp;·&nbsp; [**Slides**](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/docs/Graph_RAG_PPT.pptx)
 
 ## What this is
 
@@ -48,6 +48,9 @@ data showed. Method details and caveats are in
 [RESULTS.md](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/RESULTS.md).
 
 ## Explore
+
+- **[Three-minute interactive walkthrough](https://graphrag-pubmedqa-ablation.vercel.app/walkthrough)** — synthetic example of chunk retrieval and parent-abstract expansion; no model calls, backend or GPU required
+- **[Reviewer guide](https://github.com/vardhjain/graphrag-pubmedqa-ablation/blob/main/REVIEWER_GUIDE.md)** — code review route, system boundaries, caveats and next experiments
 
 - **[Live demo](https://graphrag-pubmedqa-ablation.vercel.app)** — ask a biomedical question and see the graph path behind the answer. It is a smaller version of the experiment (1,000 papers, no re-ranker), so treat it as an illustration; the first answer can take 1–2 minutes while the free-tier server wakes up.
 - **[Results dashboard](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)** — interactive charts of the numbers above

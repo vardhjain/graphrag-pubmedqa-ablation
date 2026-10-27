@@ -13,11 +13,24 @@
 [![Results Dashboard](https://img.shields.io/badge/Streamlit-Results%20Dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 [![Docs](https://img.shields.io/badge/docs-online-1f6feb)](https://vardhjain.github.io/graphrag-pubmedqa-ablation/)
 
-[**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results**](#-results) &nbsp;·&nbsp; [**How it works**](#-how-the-experiment-works) &nbsp;·&nbsp; [**Run it yourself**](#-run-it-yourself) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
+[**🎯 3-minute walkthrough**](https://graphrag-pubmedqa-ablation.vercel.app/walkthrough) &nbsp;·&nbsp; [**▶ Live demo**](https://graphrag-pubmedqa-ablation.vercel.app) &nbsp;·&nbsp; [**Results**](#-results) &nbsp;·&nbsp; [**How it works**](#-how-the-experiment-works) &nbsp;·&nbsp; [**Run it yourself**](#-run-it-yourself) &nbsp;·&nbsp; [**Results dashboard**](https://graphrag-pubmedapp-ablation-busqcyjfc7kywhq9m9flwo.streamlit.app)
 
 Co-built with [Akash Raghavendra](https://github.com/Akash-Raghavendra).
 
 </div>
+
+## Start here: review the project in three minutes
+
+**[Interactive walkthrough](https://graphrag-pubmedqa-ablation.vercel.app/walkthrough)**
+— see exactly how a retrieved chunk becomes a full-paper context, using a clearly
+labeled **synthetic example**. No account, backend, or model download required.
+Then open the [benchmark](https://graphrag-pubmedqa-ablation.vercel.app/benchmark)
+for the historical measured results or [live chat](https://graphrag-pubmedqa-ablation.vercel.app)
+to try the separate smaller hosted system (free-tier cold starts can take minutes).
+
+**[Five-minute reviewer guide](REVIEWER_GUIDE.md)** — direct code links, the
+engineering decisions, what was actually measured, and what still needs
+experimental validation.
 
 ## 👋 The short version
 
@@ -130,6 +143,15 @@ scientific limitations.
   ingestion bug is fixed.
 - **The raw per-question outputs were not saved**, so the tables above cannot
   be regenerated from this repo alone without re-running the benchmark.
+
+**Can the results be independently verified?** The existing repository
+contains the historical aggregated figures but not the original per-question
+predictions, so the published accuracy cannot be independently reconstructed.
+A new [read-only graph integrity audit and evidence export protocol](EVIDENCE.md)
+lets future reruns publish checksummed per-question predictions, reproducible
+metrics and exact paired comparisons. It requires **no LLM inference** to
+audit an existing graph or verify already-saved results; obtaining fresh
+predictions still requires an actual benchmark run.
 
 Full numbers, method notes, and caveats are in **[RESULTS.md](RESULTS.md)**;
 known weaknesses are tracked openly in **[GAPS.md](GAPS.md)**.
@@ -251,6 +273,17 @@ once, then
 (set `ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets). An interrupted run can be
 continued with `--resume`.
 
+New benchmark runs use **strict answer scoring** by default: only an explicit
+`Final Answer: yes/no/maybe` verdict is accepted. Unparseable responses are
+reported as `invalid` and counted as wrong, not silently treated as
+`maybe`. To reproduce the historical scoring behavior, pass
+`python scripts/run_benchmark.py --arm graph --parser legacy`; results using
+different parsers or dataset/corpus fingerprints are not paired. Raw per-arm
+outputs record the parser version, prompt checksum, sample checksum, retrieval
+corpus checksum, and model/generation settings. A corpus checksum does **not**
+validate graph edges; the documented duplicate-edge audit and benchmark re-run
+are still required.
+
 All settings come from environment variables (see [`.env.example`](.env.example));
 nothing is hardcoded. A fifth setup, `graph_norr` (full abstracts without the
 re-ranker, matching the live demo), is included in `make benchmark` but has no
@@ -333,3 +366,30 @@ If this project is useful in your work, please cite it using
 ## 📄 License
 
 [MIT](LICENSE)
+
+
+### Database integration tests (no cloud credentials)
+
+The regular unit test suite uses fakes for speed. A separate [graph database
+integration workflow](.github/workflows/graph-integration.yml) executes the
+**real AQL and Cypher** with disposable, synthetic records in localhost-only
+ArangoDB 3.11 and Neo4j 5.26 Docker containers. It checks edge idempotence,
+label leakage, parent-abstract expansion, and shared MeSH concept ranking.
+Existing numerical section-ordering defects and the Arango shared-concept
+counting discrepancy are tracked as **strict expected failures** (`xfail`),
+not silently patched into the previously benchmarked retrieval pipeline.
+
+To reproduce these tests on a local machine with Docker installed:
+
+```bash
+docker run -d --rm --name kgqa-test-arango -p 127.0.0.1:8529:8529 -e ARANGO_ROOT_PASSWORD=integration_only_password arangodb:3.11
+docker run -d --rm --name kgqa-test-neo4j -p 127.0.0.1:7687:7687 -e NEO4J_AUTH=neo4j/integration_only_password neo4j:5.26
+python -m pip install pytest numpy requests tqdm "python-arango>=8,<9" "neo4j>=5,<6"
+KGQA_RUN_DB_INTEGRATION=1 pytest -ra tests/integration/test_graph_db_contract.py
+docker rm -f kgqa-test-arango kgqa-test-neo4j
+```
+
+These tests refuse non-local database URLs and do not download the
+PubMedQA corpus, LLM weights, or hosted database credentials. They are
+**integration tests, not an accuracy benchmark**; resolving the expected
+failures in benchmark AQL still requires a fresh reproducible benchmark.

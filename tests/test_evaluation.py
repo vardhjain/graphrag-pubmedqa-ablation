@@ -1,4 +1,4 @@
-from kgqa.evaluation import Evaluator, FuzzyEvaluator, mcnemar_test
+from kgqa.evaluation import Evaluator, FuzzyEvaluator, StrictAnswerParser, mcnemar_test
 
 
 def test_extract_final_answer_tag():
@@ -113,3 +113,44 @@ def test_report_and_save_roundtrip(tmp_path):
     loaded = json.loads(path.read_text())
     assert loaded["samples"] == 2
     assert loaded["ids"] == ["1", "2"]
+
+
+def test_strict_parser_requires_an_explicit_verdict():
+    parser = StrictAnswerParser()
+    assert parser.extract_answer("The study is conclusive.\nFinal Answer: YES.") == "yes"
+    assert parser.extract_answer("I think the answer is no") is None
+    assert parser.extract_answer("semifinal answer: no") is None
+    assert parser.extract_answer("Final Answer: yes/no/maybe") is None
+
+
+def test_strict_parser_ignores_closed_and_truncated_thinking():
+    parser = StrictAnswerParser()
+    assert parser.extract_answer("<think>Final Answer: no</think>\nFinal Answer: yes") == "yes"
+    assert parser.extract_answer("<think>Final Answer: yes") is None
+
+
+def test_strict_parser_rejects_conflicting_final_answers():
+    parser = StrictAnswerParser()
+    assert parser.extract_answer("Final Answer: yes\nFinal Answer: no") is None
+    assert parser.extract_answer("Final Answer: no\nFinal Answer: no") == "no"
+
+
+def test_strict_invalid_is_always_wrong_even_for_maybe_ground_truth(tmp_path):
+    import json
+
+    ev = Evaluator("graph")
+    ev.record("maybe", "invalid", 1.0, sample_id="x", invalid=True)
+    ev.record("yes", "yes", 1.0, sample_id="y")
+    assert ev.summary()["n_invalid"] == 1
+    assert ev.summary()["y_pred"] == ["invalid", "yes"]
+    assert ev.accuracy() == 0.5
+    path = tmp_path / "checkpoint.json"
+    ev.save(str(path), quiet=True)
+    restored = Evaluator.from_saved(json.loads(path.read_text()))
+    assert restored.invalid == [True, False]
+    assert restored.summary()["n_invalid"] == 1
+
+
+def test_legacy_resume_defaults_invalid_flags_to_false():
+    ev = Evaluator.from_saved({"y_true": ["yes"], "y_pred": ["maybe"]})
+    assert ev.invalid == [False]
