@@ -13,10 +13,7 @@ import json
 
 def sample_fingerprint(samples) -> str:
     """Hash the ordered evaluation question, id, and ground truth triples."""
-    values = [
-        [str(s.pubid), s.question, s.final_decision]
-        for s in samples
-    ]
+    values = [[str(s.pubid), s.question, s.final_decision] for s in samples]
     encoded = json.dumps(values, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -29,9 +26,7 @@ def corpus_fingerprint(store) -> str:
     """
     if len(store.ids) != len(set(store.ids)):
         raise ValueError("Duplicate chunk IDs in retrieval corpus")
-    if not (
-        len(store.ids) == len(store.paper_keys) == len(store.texts) == len(store.embeddings)
-    ):
+    if not (len(store.ids) == len(store.paper_keys) == len(store.texts) == len(store.embeddings)):
         raise ValueError("Inconsistent retrieval corpus array lengths")
     digest = hashlib.sha256()
     for index in sorted(range(len(store.ids)), key=store.ids.__getitem__):
