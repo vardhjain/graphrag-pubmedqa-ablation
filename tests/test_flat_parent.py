@@ -21,9 +21,7 @@ def _store(fake_encoder):
 
 
 def _graph_db():
-    return FakeDB(
-        abstracts={"a": "a methods a results", "b": "b methods b results"}
-    )
+    return FakeDB(abstracts={"a": "a methods a results", "b": "b methods b results"})
 
 
 def test_flat_parent_is_reranked_negative_control(fake_encoder, fake_reranker):
@@ -51,9 +49,7 @@ def test_same_chunks_produce_identical_graph_and_flat_prompts(fake_encoder):
         Candidate("Chunks/a_0", "a", "a methods"),
     ]
     assert flat.gather_studies(candidates) == graph.gather_studies(candidates)
-    assert flat._build_context(question, candidates) == graph._build_context(
-        question, candidates
-    )
+    assert flat._build_context(question, candidates) == graph._build_context(question, candidates)
     assert flat.gather_studies(candidates) == [
         ("b", "b methods b results"),
         ("a", "a methods a results"),
@@ -78,9 +74,7 @@ def test_flat_parent_is_invariant_to_chunk_store_scan_order(fake_encoder):
 def test_historical_section_key_order_is_matched_not_silently_changed(fake_encoder):
     texts = [f"section {i}" for i in range(12)]
     ids = [f"Chunks/p_{i}" for i in range(12)]
-    store = ChunkStore(
-        ids, ["p"] * len(ids), texts, fake_encoder.encode(texts)
-    )
+    store = ChunkStore(ids, ["p"] * len(ids), texts, fake_encoder.encode(texts))
     flat = FlatParentRetriever(store, fake_encoder)
     got = flat._parent_abstracts([ids[0]])[0][1]
     expected = " ".join(texts[i] for i in sorted(range(12), key=lambda i: ids[i]))
@@ -110,9 +104,7 @@ def test_parity_preflight_passes_on_clean_fixture(fake_encoder):
 
 
 def test_parity_preflight_fails_on_duplicate_context_sections(fake_encoder):
-    db = FakeDB(
-        abstracts={"a": "a methods a results a results", "b": "b methods b results"}
-    )
+    db = FakeDB(abstracts={"a": "a methods a results a results", "b": "b methods b results"})
     with pytest.raises(ValueError, match="Context mismatch"):
         check_parent_context_parity(db, _store(fake_encoder), n=4, seed=7)
 
@@ -150,9 +142,9 @@ def test_contexts_use_identical_llm_prompt_template(fake_encoder):
     flat = FlatParentRetriever(_store(fake_encoder), fake_encoder)
     candidates = [Candidate("Chunks/a_0", "a", "a methods")]
     question = "What happened?"
-    assert build_prompt(
-        graph._build_context(question, candidates), question
-    ) == build_prompt(flat._build_context(question, candidates), question)
+    assert build_prompt(graph._build_context(question, candidates), question) == build_prompt(
+        flat._build_context(question, candidates), question
+    )
     assert "Final Answer" in BENCHMARK_SYSTEM_PROMPT
 
 
