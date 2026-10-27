@@ -27,9 +27,6 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "src"))
 
-from sentence_transformers import SentenceTransformer  # noqa: E402
-from tqdm import tqdm  # noqa: E402
-
 from kgqa.config import (  # noqa: E402
     DATASET_NAME,
     EMBEDDING_MODEL,
@@ -70,6 +67,7 @@ MERGE (p)-[:HAS_CONTEXT]->(c)
 
 def ingest_labeled_split(driver, model, batch_size: int = 50) -> int:
     from datasets import load_dataset
+    from tqdm import tqdm
 
     ds = load_dataset(DATASET_NAME, LABELED_CONFIG, split="train")
 
@@ -121,6 +119,8 @@ def ingest_labeled_split(driver, model, batch_size: int = 50) -> int:
 
 
 def main():
+    from sentence_transformers import SentenceTransformer
+
     cfg = Neo4jConfig()
     driver = connect_neo4j(cfg)
     setup_constraints(driver)
