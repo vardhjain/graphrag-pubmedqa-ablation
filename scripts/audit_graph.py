@@ -115,8 +115,10 @@ def audit_graph(db) -> dict:
     checks = {}
     for name, query in CHECK_QUERIES.items():
         checks[name] = sum(int(value) for value in db.aql.execute(query, batch_size=2000))
-    ready = counts["Papers"] > 0 and counts["Chunks"] > 0 and all(
-        value == 0 for value in checks.values()
+    ready = (
+        counts["Papers"] > 0
+        and counts["Chunks"] > 0
+        and all(value == 0 for value in checks.values())
     )
     return {
         "schema_version": "graph-audit-v1",
