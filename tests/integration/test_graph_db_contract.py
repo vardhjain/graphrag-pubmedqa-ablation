@@ -153,10 +153,6 @@ def test_arango_ingestion_is_idempotent_and_does_not_leak_labels(arango_db):
     ]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known AQL bug: c._key sorts section _10 before _2 (GAPS #18)",
-)
 def test_arango_parent_abstract_has_numerical_section_order(arango_db):
     texts = [f"section{i}" for i in range(12)]
     ingest_split(arango_db, [_record("order", texts)], TinyEncoder(), batch_size=1)
@@ -164,10 +160,6 @@ def test_arango_parent_abstract_has_numerical_section_order(arango_db):
     assert retriever._parent_abstracts(["Chunks/order_0"]) == [("order", " ".join(texts))]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known AQL bug: counts seed paths, not DISTINCT shared concepts (GAPS #9)",
-)
 def test_arango_concept_neighbours_rank_distinct_shared_mesh(arango_db):
     # All three seeds share A. Neighbour n1 shares only A (1 DISTINCT concept,
     # but 3 paths); n2 shares B and C with seed s1 (2 DISTINCT concepts).
@@ -215,10 +207,6 @@ def test_neo4j_merge_is_idempotent_and_parent_deduplicates(neo4j_graph):
     ]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known Cypher bug: ORDER BY c.key sorts section _10 before _2",
-)
 def test_neo4j_parent_abstract_has_numerical_section_order(neo4j_graph):
     driver, prefix = neo4j_graph
     paper = prefix + "order"
@@ -228,6 +216,92 @@ def test_neo4j_parent_abstract_has_numerical_section_order(neo4j_graph):
 
     retriever = Neo4jGraphRetriever(store=None, encoder=None, driver=driver)
     assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [(paper, " ".join(texts))]
+
+
+def test_arango_parent_deduplicates_legacy_edges(arango_db):
+    """Repeated HAS_CONTEXT paths should never repeat abstract sections."""
+    ingest_split(
+        arango_db,
+        [_record("legacy", ["methods", "results"])],
+        TinyEncoder(),
+        batch_size=1,
+    )
+    arango_db.collection("HAS_CONTEXT").insert(
+        {
+            "_key": "intentional_duplicate",
+            "_from": "Papers/legacy",
+            "_to": "Chunks/legacy_0",
+        }
+    )
+    retriever = GraphRetriever(store=None, encoder=None, db=arango_db)
+    assert retriever._parent_abstracts(["Chunks/legacy_0"]) == [("legacy", "methods results")]
+
+
+def test_arango_concept_hop_orders_sections_numerically(arango_db):
+    ingest_split(
+        arango_db,
+        [
+            _record("seed", ["seed"], ["M"]),
+            _record("neighbor", [f"part{i}" for i in range(12)], ["M"]),
+        ],
+        TinyEncoder(),
+        batch_size=1,
+    )
+    retriever = GraphRetriever(
+        store=None,
+        encoder=None,
+        db=arango_db,
+        use_concepts=True,
+        concept_hop_papers=1,
+    )
+    assert retriever._concept_neighbours(["seed"]) == [
+        ("neighbor", " ".join(f"part{i}" for i in range(12)))
+    ]
+
+
+def test_neo4j_parent_deduplicates_legacy_edges(neo4j_graph):
+    driver, prefix = neo4j_graph
+    paper = prefix + "legacy"
+    _neo4j_merge(
+        driver,
+        [paper],
+        [(f"{paper}_0", paper, "methods"), (f"{paper}_1", paper, "results")],
+        [],
+        [],
+    )
+    with driver.session() as session:
+        session.run(
+            "MATCH (p:Paper {key: $paper}), (c:Chunk {key: $chunk}) CREATE (p)-[:HAS_CONTEXT]->(c)",
+            paper=paper,
+            chunk=f"{paper}_0",
+        ).consume()
+    retriever = Neo4jGraphRetriever(store=None, encoder=None, driver=driver)
+    assert retriever._parent_abstracts([f"Chunks/{paper}_0"]) == [(paper, "methods results")]
+
+
+def test_neo4j_concept_hop_orders_sections_numerically(neo4j_graph):
+    driver, prefix = neo4j_graph
+    seed, neighbour, concept = (prefix + part for part in ("seed", "neighbor", "M"))
+    chunks = [(f"{seed}_0", seed, "seed")] + [
+        (f"{neighbour}_{i}", neighbour, f"part{i}") for i in range(12)
+    ]
+    _neo4j_merge(
+        driver,
+        [seed, neighbour],
+        chunks,
+        [(seed, concept), (neighbour, concept)],
+        [concept],
+    )
+    retriever = Neo4jGraphRetriever(
+        store=None,
+        encoder=None,
+        driver=driver,
+        use_concepts=True,
+        concept_hop_papers=1,
+    )
+    assert retriever._concept_neighbours([seed]) == [
+        (neighbour, " ".join(f"part{i}" for i in range(12)))
+    ]
 
 
 def test_neo4j_concept_neighbours_count_distinct_mesh(neo4j_graph):

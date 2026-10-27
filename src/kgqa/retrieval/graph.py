@@ -17,16 +17,22 @@ from __future__ import annotations
 from ..config import CONCEPT_HOP_PAPERS, HAS_CONTEXT, MENTIONS
 from .base import BaseRetriever, Candidate, GraphExpansionMixin
 
-# Reconstruct the full abstract of each selected chunk's parent paper.
+# Paper->chunk traversal preserves the incoming reranked chunk order.
+# The original SORT c._key was lexical (p_10 before p_2). COLLECT collapses
+# repeated HAS_CONTEXT edges referring to the same chunk, but a real graph
+# integrity audit is still required before claiming benchmark reproducibility.
 _PARENT_AQL = """
     WITH Papers, Chunks
     FOR cid IN @ids
         LET chunk = DOCUMENT(cid)
+        FILTER chunk != null
         FOR paper IN 1..1 INBOUND chunk @@has_context
             LET sections = (
                 FOR c IN 1..1 OUTBOUND paper @@has_context
-                    SORT c._key
-                    RETURN c.text
+                    COLLECT chunk_key = c._key INTO copies
+                    LET section_text = FIRST(copies).c.text
+                    SORT TO_NUMBER(LAST(SPLIT(chunk_key, "_"))) ASC, chunk_key ASC
+                    RETURN section_text
             )
             RETURN DISTINCT {
                 paper: paper._key,
@@ -34,45 +40,34 @@ _PARENT_AQL = """
             }
 """
 
-# From the seed papers, hop across shared MeSH concepts to related papers.
-# Two-stage: rank neighbours by how many concepts they share with the seeds
-# (cheap), then reconstruct abstracts only for the top-N (avoids building an
-# abstract for every candidate on every query).
-#
-# NOTE -- known semantic divergence from neo4j_graph.py's _CONCEPT_CYPHER
-# (GAPS #9): the COLLECT below counts every (seed, concept) -> neighbour
-# edge reaching a neighbour, not the number of *distinct* concepts shared
-# with it -- two different seed papers sharing one concept with the same
-# neighbour count as 2, not 1. _CONCEPT_CYPHER's `count(DISTINCT concept)`
-# is the intended semantics ("how many concepts they share with the seeds",
-# per the comment above). Left undisturbed rather than fixed blind: AQL
-# can't be exercised in this dev environment (tests fake db.aql.execute
-# entirely, see tests/conftest.py's FakeAQL), and this project's rule is
-# that retrieval/graph.py's queries must stay behavior-compatible without a
-# fresh benchmark run to re-validate against. Fix this AQL to explicitly
-# count unique concept keys per neighbour (e.g. COLLECT ... INTO groups,
-# then COUNT(UNIQUE(...))) the next time this file is touched with a live
-# ArangoDB instance to verify against.
+# Count *distinct MeSH concepts*, not (seed, concept, neighbour) paths:
+# several seed papers mentioning the same MeSH term must only contribute one
+# shared concept to a neighbour. First COLLECT deduplicates (neighbour, MeSH)
+# pairs (also robust to repeated MENTIONS edges); second COLLECT counts terms.
+# Tie-break by paper key so results are reproducible between backends.
 _CONCEPT_AQL = """
     WITH Papers, Chunks, Concepts
     LET seeds = @paper_keys
     LET ranked = (
-        FOR pkey IN seeds
+        FOR pkey IN UNIQUE(seeds)
             LET paper = DOCUMENT(CONCAT("Papers/", pkey))
             FILTER paper != null
             FOR concept IN 1..1 OUTBOUND paper @@mentions
                 FOR neighbour IN 1..1 INBOUND concept @@mentions
                     FILTER neighbour._key NOT IN seeds
-                    COLLECT nkey = neighbour._key WITH COUNT INTO shared
-                    SORT shared DESC
+                    COLLECT neighbour_key = neighbour._key, concept_key = concept._key
+                    COLLECT nkey = neighbour_key WITH COUNT INTO shared
+                    SORT shared DESC, nkey ASC
                     LIMIT @limit
                     RETURN { nkey: nkey, shared: shared }
     )
     FOR n IN ranked
         LET sections = (
             FOR c IN 1..1 OUTBOUND DOCUMENT(CONCAT("Papers/", n.nkey)) @@has_context
-                SORT c._key
-                RETURN c.text
+                COLLECT chunk_key = c._key INTO copies
+                LET section_text = FIRST(copies).c.text
+                SORT TO_NUMBER(LAST(SPLIT(chunk_key, "_"))) ASC, chunk_key ASC
+                RETURN section_text
         )
         RETURN { paper: n.nkey, abstract: CONCAT_SEPARATOR(" ", sections), shared: n.shared }
 """

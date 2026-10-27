@@ -46,6 +46,13 @@ there are no results for it.
 | **plain_rr → graph (parent-expansion effect)** | **+22.50** | 71 | 26 | **<0.0001** | **yes** |
 | graph → graph_concepts (concept-hop effect) | -2.00 | 26 | 30 | 0.6889 | no |
 
+**Retrieval protocol update (not yet benchmarked):** newer ArangoDB and
+Neo4j queries use numeric abstract-section ordering, deduplicate repeated
+context links, and count distinct shared MeSH concepts. The flat-parent
+negative control matches numeric ordering. **None of the figures below
+measures these corrected queries.** They must be evaluated on a cleaned graph
+under one new code revision before reporting an improvement.
+
 **Scoring protocol:** These are historical results from the original
 `FuzzyEvaluator` (`legacy-v1`), which defaults unparseable text to the valid
 `maybe` class. Newly generated runs default to `strict-v2`, requiring a

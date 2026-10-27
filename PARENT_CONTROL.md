@@ -22,7 +22,7 @@ currently **implemented and unit tested, not evaluated on a real LLM**.
 | Chunk embeddings and top-k selection | Same | Same |
 | Cross-encoder reranker | Enabled | Enabled |
 | Parent paper source | `HAS_CONTEXT` AQL graph edges | Existing chunk-store `paper_key` and index |
-| Abstract section sorting | Existing `c._key` lexical order | Same lexical ordering for parity |
+| Abstract section sorting | Numeric section suffix, then chunk key | Same numeric order for parity |
 | Context labels and prompt | `=== STUDY n ===` | Identical |
 | LLM, temperature, token configuration | Same | Same |
 | Extra concept hops | Off | Off |
@@ -70,11 +70,13 @@ match the flat index for a seeded set of real chunk IDs. This is a
 edge/multiplicity audit and ensure one context edge per chunk before any LLM
 evaluation. `check_parent_parity.py` also refuses degraded results.
 
-**Known obstacles:** historical `HAS_CONTEXT` edge duplication can repeat
-sections in the graph but not the flat index. Section keys like `_10` sort
-before `_2` lexically in current AQL; the new flat control **deliberately
-matches** that behavior for prompt parity. Correct ordering in *both* arms
-should be introduced and evaluated in a separate, versioned experiment.
+**Integrity caveat:** historical `HAS_CONTEXT` edges may be duplicated.
+The corrected graph queries now deduplicate repeated references to the same
+chunk while ordering `_2` before `_10`, and the flat control uses the
+same numeric section index ordering. This improves structural parity but does
+**not** make the old database trustworthy or retrospectively validate its
+benchmark results. Audit and repair the graph, check context parity, and
+rerun both arms under the new code revision before reporting any outcome.
 
 ## Matched inference experiment (optional)
 

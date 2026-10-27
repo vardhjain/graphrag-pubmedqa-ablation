@@ -156,34 +156,24 @@ confirm the dashboard's Environment tab matches after any future change here.
 
 ---
 
-## 9. ~~Duplicated graph-retrieval logic across two backends~~ — PARTIALLY FIXED
+## 9. ~~Duplicated traversal logic and divergent MeSH-neighbour semantics~~ — FIXED IN SOURCE
 
-**What it was:** `GraphRetriever` (ArangoDB, `graph.py`) and `Neo4jGraphRetriever`
-(`neo4j_graph.py`) had near-identical `gather_studies` bodies (parent expansion +
-optional concept hop + same degrade-to-raw-chunks fallback). The two also compute
-"shared concept count" with subtly different semantics — AQL `COLLECT … WITH COUNT`
-vs Cypher `count(DISTINCT concept)`.
+The original ArangoDB `_CONCEPT_AQL` counted each seed-to-neighbour path,
+whereas Neo4j `_CONCEPT_CYPHER` correctly counted distinct shared concepts.
+Three seed papers mentioning the same concept therefore boosted one neighbour
+three times, distorting the rank of related papers.
 
-**Fixed (2026-07-17):** the shared `gather_studies` orchestration is lifted into
-`GraphExpansionMixin` (`src/kgqa/retrieval/base.py`); both retrievers now inherit
-the identical control flow instead of carrying their own copy —
-`tests/test_retrieval.py`'s `test_both_graph_backends_share_the_expansion_mixin`
-pins this directly (`GraphRetriever.gather_studies is
-GraphExpansionMixin.gather_studies`, same for Neo4j).
+**Fixed in the query-correctness PR:** the two-stage AQL `COLLECT` first
+deduplicates `(neighbour, concept)` pairs, then counts their distinct shared
+concepts; ties break on the paper key. The Neo4j query retains its
+`count(DISTINCT concept)` behavior. Real ArangoDB and Neo4j integration
+tests exercise this semantic contrast, so it is no longer only a mocked claim.
+Both retrieval implementations already share `GraphExpansionMixin`'s
+fallback/deduplication orchestration.
 
-**Still open — the concept-count semantic divergence itself:** deliberately
-*not* fixed here. `_CONCEPT_AQL` (`graph.py`) counts every `(seed, concept) ->
-neighbour` edge; `_CONCEPT_CYPHER` (`neo4j_graph.py`)'s `count(DISTINCT concept)`
-is the correct, intended semantics. Fixing the AQL side means rewriting a live
-query with no way to execute or verify it in this dev environment (the test
-suite fakes `db.aql.execute` entirely — see `tests/conftest.py`'s `FakeAQL`,
-which pattern-matches query text rather than running it), and this project's
-rule is that these queries stay behavior-compatible without a fresh benchmark
-run to re-validate against. Both files now carry an explicit comment
-cross-referencing the other and stating which fix is needed
-(`graph.py`'s `_CONCEPT_AQL`, `neo4j_graph.py`'s `_CONCEPT_CYPHER`) — fix the
-AQL to count unique concept keys per neighbour the next time this file is
-touched with a live ArangoDB instance available.
+**Benchmark status remains open:** this changes the graph-concept arm's
+retrieval, so the historical accuracy and latency are **not revalidated**.
+A fresh, paired strict-v2 run with saved per-question evidence is required.
 
 ---
 
@@ -355,12 +345,19 @@ next benchmark re-run and note it in RESULTS.md.
 
 ---
 
-## 18. ArangoDB `_PARENT_AQL` orders sections lexicographically — LOW (open)
+## 18. ~~Lexical abstract section ordering in AQL and Cypher~~ — FIXED IN SOURCE
 
-**What:** Sections are sorted by chunk key as a string, so `_10` sorts before
-`_2`. Only 4 (unlabeled) papers have ≥10 sections, so the effect on the
-benchmark is negligible. The Neo4j parent query was fixed to order numerically.
-**Fix:** order by the parsed index in the AQL on the next re-run.
+Originally both backends ordered chunk keys as strings, so `_10` came
+before `_2`. The ArangoDB parent and concept-hop AQL, Neo4j parent and
+concept-hop Cypher, and `FlatParentRetriever` now parse the **numeric section
+suffix** and use a deterministic key tie-breaker. Graph-query integration
+tests exercise 12-section parent and concept-hop abstracts on both engines.
+The graph traversals also deduplicate repeated edges referring to the same
+chunk before joining sections; the original database still needs cleanup.
+
+**Historical benchmark:** `results/summary.json` is frozen. Correcting
+section ordering is a new retrieval version, not retroactive proof of the
+reported results. Rerun the full benchmark after a graph integrity audit.
 
 ---
 

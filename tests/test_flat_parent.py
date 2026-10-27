@@ -71,15 +71,21 @@ def test_flat_parent_is_invariant_to_chunk_store_scan_order(fake_encoder):
     assert a == b
 
 
-def test_historical_section_key_order_is_matched_not_silently_changed(fake_encoder):
+def test_parent_baseline_orders_sections_numerically_with_graph(fake_encoder):
     texts = [f"section {i}" for i in range(12)]
     ids = [f"Chunks/p_{i}" for i in range(12)]
     store = ChunkStore(ids, ["p"] * len(ids), texts, fake_encoder.encode(texts))
     flat = FlatParentRetriever(store, fake_encoder)
     got = flat._parent_abstracts([ids[0]])[0][1]
-    expected = " ".join(texts[i] for i in sorted(range(12), key=lambda i: ids[i]))
-    assert got == expected
-    assert got != " ".join(texts)  # Known graph AQL section-order defect
+    assert got == " ".join(texts)
+    assert got != " ".join(texts[i] for i in sorted(range(12), key=lambda i: ids[i]))
+
+
+def test_flat_parent_rejects_non_numeric_section_ids(fake_encoder):
+    store = _store(fake_encoder)
+    store.ids[0] = "Chunks/b_footnote"
+    with pytest.raises(ValueError, match="Invalid numeric chunk section"):
+        FlatParentRetriever(store, fake_encoder)
 
 
 def test_missing_flat_parent_lookup_is_counted_as_degraded(fake_encoder):

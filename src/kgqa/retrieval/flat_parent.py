@@ -41,11 +41,18 @@ class FlatParentRetriever(GraphExpansionMixin, BaseRetriever):
             self._chunk_to_paper[chunk_id] = paper_key
             self._paper_to_indices.setdefault(paper_key, []).append(index)
 
-        # Match the historical Arango AQL's SORT c._key exactly. In particular
-        # _10 sorts ahead of _2, a *known* defect tracked separately. Changing
-        # just this baseline to numeric ordering would break input parity.
+        # Match the corrected AQL and Cypher numeric section order. The
+        # suffix is the section index emitted by both ingestion pipelines.
+        # Fail closed on malformed IDs rather than silently losing parity.
+        def section_order(index: int) -> tuple[int, str]:
+            key = store.ids[index].split("/", 1)[1]
+            _, separator, suffix = key.rpartition("_")
+            if not separator or not suffix.isdecimal():
+                raise ValueError(f"Invalid numeric chunk section: {key!r}")
+            return int(suffix), key
+
         for indices in self._paper_to_indices.values():
-            indices.sort(key=lambda index: store.ids[index].split("/", 1)[1])
+            indices.sort(key=section_order)
 
     def _parent_abstracts(self, chunk_ids: list[str]) -> list[tuple[str, str]]:
         studies: list[tuple[str, str]] = []
