@@ -7,7 +7,6 @@ duplicates cancel orphaned chunks. Never mark that graph clean.
 from __future__ import annotations
 
 import pytest
-
 from scripts.audit_graph import CHECK_QUERIES, COLLECTIONS, audit_graph
 
 
