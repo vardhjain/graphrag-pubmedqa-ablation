@@ -33,7 +33,6 @@ jobs:
       - name: Lint (ruff)
         run: |
           ruff check src scripts tests app backend
-          ruff format --diff src/kgqa/evaluation.py src/kgqa/provenance.py scripts/run_benchmark.py scripts/compare.py tests/test_evaluation.py tests/test_provenance.py tests/test_run_benchmark.py tests/test_compare.py
           ruff format --check src scripts tests app backend
 
       - name: Eval regression gate
