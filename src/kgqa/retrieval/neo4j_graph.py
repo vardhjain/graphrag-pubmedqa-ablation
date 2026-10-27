@@ -31,20 +31,17 @@ UNWIND range(0, size($keys) - 1) AS i
 MATCH (:Chunk {key: $keys[i]})<-[:HAS_CONTEXT]-(paper:Paper)
 WITH paper, min(i) AS rank
 MATCH (paper)-[:HAS_CONTEXT]->(c:Chunk)
-WITH paper, rank, c
-ORDER BY c.key
+WITH DISTINCT paper, rank, c
+ORDER BY toInteger(last(split(c.key, "_"))), c.key
 WITH paper, rank, collect(c.text) AS texts
 RETURN paper.key AS paper, texts
 ORDER BY rank
 """
 
-# NOTE -- known semantic divergence from graph.py's _CONCEPT_AQL (GAPS #9):
-# this correctly counts DISTINCT concepts shared with each neighbour
-# (count(DISTINCT concept)). _CONCEPT_AQL's COLLECT ... WITH COUNT instead
-# counts every (seed, concept) -> neighbour edge, which overcounts when
-# multiple seeds share one concept with the same neighbour. This file's
-# semantics are the intended ones; graph.py's comment has the fix noted for
-# whenever it can be verified against a live ArangoDB instance.
+# Both backends now count DISTINCT shared MeSH concepts. When multiple
+# seed papers mention the same term, its neighbour score increases only once.
+# DISTINCT on retrieved chunks prevents legacy repeated relationship edges
+# from duplicating sections. The graph still needs a structural audit.
 _CONCEPT_CYPHER = """
 MATCH (seed:Paper) WHERE seed.key IN $paper_keys
 MATCH (seed)-[:MENTIONS]->(concept:Concept)<-[:MENTIONS]-(neighbour:Paper)
@@ -53,8 +50,8 @@ WITH neighbour, count(DISTINCT concept) AS shared
 ORDER BY shared DESC, neighbour.key
 LIMIT $limit
 MATCH (neighbour)-[:HAS_CONTEXT]->(c:Chunk)
-WITH neighbour, shared, c
-ORDER BY c.key
+WITH DISTINCT neighbour, shared, c
+ORDER BY toInteger(last(split(c.key, "_"))), c.key
 WITH neighbour, shared, collect(c.text) AS texts
 RETURN neighbour.key AS paper, texts, shared
 ORDER BY shared DESC, paper
