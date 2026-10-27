@@ -32,7 +32,6 @@ jobs:
 
       - name: Lint (ruff)
         run: |
-          ruff format --diff tests/integration/test_graph_db_contract.py
           ruff check src scripts tests app backend
           ruff format --check src scripts tests app backend
 
