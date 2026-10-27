@@ -1,9 +1,11 @@
 """Aggregate arm results: summary table, McNemar tests, and figures.
 
-    python scripts/compare.py
+    python scripts/compare.py --results-dir results/clean-<run-id> --output-dir results/clean-<run-id>/analysis
 
-Reads results/{arm}_results.json for whichever arms are present and writes
-figures + a markdown snippet to results/. The McNemar tests are paired on pubid,
+Defaults to the historical results/ directory for backward compatibility.
+For *new* runs pass --results-dir and --output-dir to avoid overwriting the
+committed summary.json / summary.md / ablation.png. Reads selected per-arm
+JSON files and writes figures and summaries only into the output directory. The McNemar tests are paired on pubid,
 so they only run for arms evaluated on the same seeded sample.
 
 Result files written by run_benchmark.py carry a ``meta`` block.
@@ -15,6 +17,7 @@ mixing legacy and v2 files is rejected from significance tests.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -226,11 +229,24 @@ def aligned(a, b):
     return gt, pa, pb
 
 
-def main():
-    results = load_results()
+def main(results_dir: str | None = None, output_dir: str | None = None):
+    source_dir = os.path.abspath(results_dir or RESULTS_DIR)
+    destination = os.path.abspath(output_dir or source_dir)
+    historical_dir = os.path.abspath(os.path.join(ROOT, "results"))
+
+    # The published dashboard and README depend on results/summary.json;
+    # reject the easy mistake of analyzing new raw runs into that folder.
+    if source_dir != historical_dir and destination == historical_dir:
+        raise ValueError(
+            "Refusing to overwrite the historical results/ from a different input "
+            "directory. Choose an isolated --output-dir."
+        )
+
+    results = load_results(source_dir)
     if not results:
-        print(f"No results found in {RESULTS_DIR}. Run scripts/run_benchmark.py first.")
+        print(f"No results found in {source_dir}. Run scripts/run_benchmark.py first.")
         sys.exit(1)
+    os.makedirs(destination, exist_ok=True)
 
     excluded, run_warnings = check_runs(results)
     if run_warnings:
@@ -372,13 +388,13 @@ def main():
             }
         )
 
-    md_path = os.path.join(RESULTS_DIR, "summary.md")
+    md_path = os.path.join(destination, "summary.md")
     with open(md_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(f"\nWrote {md_path}")
 
     seed, model = run_provenance(results, excluded)
-    json_path = os.path.join(RESULTS_DIR, "summary.json")
+    json_path = os.path.join(destination, "summary.json")
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(
             {
@@ -396,10 +412,10 @@ def main():
         )
     print(f"Wrote {json_path}")
 
-    _plot(results)
+    _plot(results, output_dir=destination)
 
 
-def _plot(results):
+def _plot(results, output_dir: str | None = None):
     try:
         import matplotlib
 
@@ -430,10 +446,23 @@ def _plot(results):
         ax.text(i - w / 2, a + 1, f"{a:.1f}", ha="center", fontsize=8)
         ax.text(i + w / 2, f + 1, f"{f:.1f}", ha="center", fontsize=8)
     fig.tight_layout()
-    out = os.path.join(RESULTS_DIR, "ablation.png")
+    out = os.path.join(output_dir or RESULTS_DIR, "ablation.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")
     print(f"Wrote {out}")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--results-dir",
+        default=None,
+        help="Directory containing per-arm *_results.json; default: results/",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Where to write summary.json, summary.md and ablation.png; "
+        "default: the selected --results-dir",
+    )
+    options = parser.parse_args()
+    main(results_dir=options.results_dir, output_dir=options.output_dir)
