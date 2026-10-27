@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from scripts.check_parent_parity import check_parent_context_parity
+from scripts.run_benchmark import ARMS, build_retriever, stamp_parent_comparison
 
 from kgqa.retrieval import ChunkStore, FlatParentRetriever, GraphRetriever
 from kgqa.retrieval.base import Candidate
-from scripts.check_parent_parity import check_parent_context_parity
-from scripts.run_benchmark import ARMS, build_retriever, stamp_parent_comparison
 from tests.conftest import FakeDB
 
 
