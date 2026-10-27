@@ -15,8 +15,6 @@ from urllib.parse import urlparse
 import numpy as np
 import pytest
 
-from kgqa.retrieval.graph import GraphRetriever
-from kgqa.retrieval.neo4j_graph import Neo4jGraphRetriever
 from scripts.ingest import ingest_split, setup_schema
 from scripts.ingest_neo4j import (
     _MERGE_CHUNKS,
@@ -25,6 +23,9 @@ from scripts.ingest_neo4j import (
     _MERGE_PAPERS,
     setup_constraints,
 )
+
+from kgqa.retrieval.graph import GraphRetriever
+from kgqa.retrieval.neo4j_graph import Neo4jGraphRetriever
 
 pytestmark = [
     pytest.mark.integration,
