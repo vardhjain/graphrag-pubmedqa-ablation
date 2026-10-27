@@ -125,7 +125,7 @@ results/summary.json  ← the canonical artifact. Consumed by:
      • RESULTS.md, README, docs/index.md (hand-copied to match — not generated)
      • app/dashboard.py (Streamlit)
      • frontend/app/benchmark (Next.js, at build time)
-     • tests/test_results_regression.py (CI gate)
+     • tests/test_results_integrity.py (CI gate)
 ```
 
 **B. Hosted-agent flow (Neo4j + cloud LLM):**
@@ -220,7 +220,7 @@ win.
    provider; the chain tries providers in order and falls back on any error.
 
 9. **`results/summary.json` is the one artifact everything points at.** The
-   Streamlit dashboard, the Next.js benchmark page, and the CI regression gate
+   Streamlit dashboard, the Next.js benchmark page, and the CI integrity gate
    read it directly; README, RESULTS.md, and docs/index.md are hand-copied from
    it, so they *can* drift and must be updated together. CI does **not** re-run the LLM benchmark (no GPU/DB); it guards the
    artifact instead.
@@ -250,7 +250,7 @@ numbers could move):**
 - `src/kgqa/evaluation.py` — `FuzzyEvaluator.extract_answer` and `mcnemar_test`
   determine every reported metric.
 - `results/summary.json` — the published-numbers artifact; edited only by
-  `scripts/compare.py`, guarded by `tests/test_results_regression.py`.
+  `scripts/compare.py`, guarded by `tests/test_results_integrity.py`.
 
 **Safe-ish to change (UI/plumbing, well-covered or non-scientific):**
 
@@ -270,8 +270,8 @@ numbers could move):**
   `service.py` and is easy to miss.
 - **The benchmark never runs in CI.** CI runs ruff + pytest with *fakes*; the real
   LLM/DB benchmark runs on Colab (see `notebooks/`). "Tests pass" says nothing
-  about the accuracy numbers — those are guarded by the regression gate on the
-  committed JSON, not re-computed.
+  about the accuracy numbers — the integrity gate validates the committed
+  JSON's statistical consistency but cannot verify experimental performance.
 - **`Candidate.chunk_id` always carries an Arango-style `Chunks/…` prefix**, even
   in the Neo4j path — `neo4j_graph.py` strips it with `_local_key`. Keep the
   prefix; other call sites depend on it.
