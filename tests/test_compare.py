@@ -383,7 +383,6 @@ def test_compare_can_write_fresh_analysis_without_touching_historical_results(
     import json
 
     import pytest
-
     import scripts.compare as compare
 
     historical = tmp_path / "results"
