@@ -46,6 +46,15 @@ there are no results for it.
 | **plain_rr → graph (parent-expansion effect)** | **+22.50** | 71 | 26 | **<0.0001** | **yes** |
 | graph → graph_concepts (concept-hop effect) | -2.00 | 26 | 30 | 0.6889 | no |
 
+**Scoring protocol:** These are historical results from the original
+`FuzzyEvaluator` (`legacy-v1`), which defaults unparseable text to the valid
+`maybe` class. Newly generated runs default to `strict-v2`, requiring a
+standalone final-answer verdict and counting unparseable responses as incorrect.
+The parsers must not be mixed in statistical comparisons. New results also
+record prompt, evaluation-sample, and retrieval-corpus fingerprints. The
+published numbers are unchanged and still need confirmation on a deduplicated
+graph.
+
 **Schema note:** the committed `summary.json` predates the fields
 `compare.py` now emits (`n_failed`, Wilson 95% CIs, recall@k, Holm-adjusted
 p). Holm-adjusting the three committed contrasts gives p = 1.6e-5 / 0.163 /
