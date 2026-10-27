@@ -266,8 +266,8 @@ def main():
     from kgqa.config import BENCHMARK_N, LLM_MODEL, OLLAMA_API, RANDOM_SEED, ArangoConfig
     from kgqa.data import load_benchmark_samples
     from kgqa.evaluation import Evaluator, FuzzyEvaluator, StrictAnswerParser
-    from kgqa.provenance import corpus_fingerprint, sample_fingerprint
     from kgqa.models import connect_arango, load_encoder, load_reranker
+    from kgqa.provenance import corpus_fingerprint, sample_fingerprint
     from kgqa.retrieval import ChunkStore
 
     if not args.no_ollama_start:
