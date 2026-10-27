@@ -97,6 +97,15 @@ Is each jump real, or luck? A paired significance test (McNemar) on the same
 - **The raw per-question outputs were not saved**, so the tables above cannot
   be regenerated from this repo alone without re-running the benchmark.
 
+**Can the results be independently verified?** The existing repository
+contains the historical aggregated figures but not the original per-question
+predictions, so the published accuracy cannot be independently reconstructed.
+A new [read-only graph integrity audit and evidence export protocol](EVIDENCE.md)
+lets future reruns publish checksummed per-question predictions, reproducible
+metrics and exact paired comparisons. It requires **no LLM inference** to
+audit an existing graph or verify already-saved results; obtaining fresh
+predictions still requires an actual benchmark run.
+
 Full numbers, method notes, and caveats are in **[RESULTS.md](RESULTS.md)**;
 known weaknesses are tracked openly in **[GAPS.md](GAPS.md)**.
 

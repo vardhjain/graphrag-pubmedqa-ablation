@@ -62,6 +62,12 @@ p). Holm-adjusting the three committed contrasts gives p = 1.6e-5 / 0.163 /
 benchmark run; the per-arm `results/{arm}_results.json` files needed to
 regenerate the summary were never committed.
 
+**Verification status:** the raw per-question outputs from the historical
+experiment are not committed, and the historical graph may have duplicated
+HAS_CONTEXT relationships. A new [audit and evidence publication protocol](EVIDENCE.md)
+can verify **future**, genuinely rerun model outputs. No synthetic results
+are substituted for missing historical predictions.
+
 **Majority-class baseline:** always answering "yes" scores **56.5%** on this
 seeded sample (113 yes / 68 no / 19 maybe). `plain`/`plain_rr` fall well below
 it; `graph` clears it by only +3.0 pp (Wilson 95% CI 52.6–66.1%, which
