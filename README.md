@@ -217,6 +217,17 @@ once, then
 (set `ARANGO_HOST` / `ARANGO_PASS` in Colab Secrets). An interrupted run can be
 continued with `--resume`.
 
+New benchmark runs use **strict answer scoring** by default: only an explicit
+`Final Answer: yes/no/maybe` verdict is accepted. Unparseable responses are
+reported as `invalid` and counted as wrong, not silently treated as
+`maybe`. To reproduce the historical scoring behavior, pass
+`python scripts/run_benchmark.py --arm graph --parser legacy`; results using
+different parsers or dataset/corpus fingerprints are not paired. Raw per-arm
+outputs record the parser version, prompt checksum, sample checksum, retrieval
+corpus checksum, and model/generation settings. A corpus checksum does **not**
+validate graph edges; the documented duplicate-edge audit and benchmark re-run
+are still required.
+
 All settings come from environment variables (see [`.env.example`](.env.example));
 nothing is hardcoded. A fifth setup, `graph_norr` (full abstracts without the
 re-ranker, matching the live demo), is included in `make benchmark` but has no
