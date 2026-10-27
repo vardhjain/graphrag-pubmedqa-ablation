@@ -84,6 +84,40 @@ Is each jump real, or luck? A paired significance test (McNemar) on the same
 3. **Related papers act as distractors here** (−2 points, 5× slower). Each
    question is about one specific paper, so other papers add noise.
 
+### New negative control: full abstract without a graph
+
+A new optional `flat_parent` retrieval arm supplies the **same parent
+abstracts** as the graph arm, but uses a local `chunk_id → paper_key →
+sections` lookup instead of ArangoDB `HAS_CONTEXT` traversal. Both share the
+same chunk embeddings, reranker, prompt, LLM and study formatting. On a
+cleanly ingested graph, their text contexts should be **byte-for-byte equal**.
+This is a stronger control than comparing full abstracts with isolated chunks:
+it asks whether graph traversal itself contributes beyond the context it
+happens to make available.
+
+**No `flat_parent` accuracy results have been measured yet.** Historical
+`plain_rr → graph` scores do not answer this narrower question. In
+particular, the published graph appears to have contained duplicate edges,
+so its full-abstract contexts may *not* have matched the flat baseline.
+
+The new free-to-run preflight uses the existing Arango graph, but no GPU,
+Ollama, or inference API:
+
+```bash
+make check-parent-parity                # 100 deterministic chunks; no LLM calls
+pytest tests/test_flat_parent.py tests/test_compare_parent_baseline.py -v
+```
+
+After rebuilding/deduplicating the graph and verifying full corpus/edge
+integrity, **optionally** run `make benchmark-parent-control` with local
+ArangoDB + Ollama when compute is available. It runs fresh graph and flat
+arms under one code version, writes to `results/parent_control/`, and
+compares paired predictions without changing the published
+`results/summary.json`. The comparator rejects legacy graph runs, changed
+model/configuration/corpus hashes, failed requests, and mismatched labels.
+See [`PARENT_CONTROL.md`](PARENT_CONTROL.md) for full reproducibility and
+scientific limitations.
+
 ### Honest limits
 
 - **Absolute accuracy is modest.** Always answering "yes" would score 56.5% on
