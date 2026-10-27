@@ -141,9 +141,7 @@ def build_meta(arm: str, seed: int, n_requested: int, parser: str = "strict") ->
     from kgqa.prompts import BENCHMARK_SYSTEM_PROMPT, build_prompt
 
     prompt_hash = hashlib.sha256(
-        (BENCHMARK_SYSTEM_PROMPT + "\n" + build_prompt("{context}", "{question}")).encode(
-            "utf-8"
-        )
+        (BENCHMARK_SYSTEM_PROMPT + "\n" + build_prompt("{context}", "{question}")).encode("utf-8")
     ).hexdigest()
     return {
         "protocol_version": 2,
@@ -190,10 +188,21 @@ def check_resume(
         # These fields are immutable for the duration of an interrupted run.
         # Missing or changed values make an old checkpoint unsafe to resume.
         required = (
-            "protocol_version", "answer_parser", "prompt_sha256",
-            "embedding_model", "reranker_model", "dataset_name",
-            "sample_sha256", "corpus_sha256", "llm_model", "num_ctx",
-            "num_predict", "temperature", "top_k", "top_k_candidates", "git_sha",
+            "protocol_version",
+            "answer_parser",
+            "prompt_sha256",
+            "embedding_model",
+            "reranker_model",
+            "dataset_name",
+            "sample_sha256",
+            "corpus_sha256",
+            "llm_model",
+            "num_ctx",
+            "num_predict",
+            "temperature",
+            "top_k",
+            "top_k_candidates",
+            "git_sha",
         )
         for key in required:
             if key not in meta or meta[key] != expected_meta.get(key):
@@ -302,9 +311,7 @@ def main():
     if args.resume and os.path.exists(partial_path):
         with open(partial_path) as f:
             data = json.load(f)
-        done = check_resume(
-            data, args.arm, seed, n, [s.pubid for s in samples], expected_meta=meta
-        )
+        done = check_resume(data, args.arm, seed, n, [s.pubid for s in samples], expected_meta=meta)
         evaluator = Evaluator.from_saved(data)
         done_ids = set(done)
         print(f"[Resume] {len(done)}/{len(samples)} already done in {partial_path}")
