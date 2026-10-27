@@ -1,5 +1,8 @@
 # Reproducible benchmark evidence and graph audit
 
+For the step-by-step freeze, audit, parity, run, verify and publication
+gates, use [CLEAN_RUN_CHECKLIST.md](CLEAN_RUN_CHECKLIST.md).
+
 This is the publication protocol for **new** PubMedQA benchmark runs. It does
 not retroactively verify the historical 200-question table: the historical
 per-question predictions were not committed, and the graph likely had duplicate
@@ -53,7 +56,7 @@ for fresh ingestion. Do not run a destructive deduplication script without
 checking the backup and edge schema. Run `audit_graph.py` again after any
 repair.
 
-If PR #6 (flat-parent control) is available, run its no-LLM parity preflight
+Run the merged flat-parent control's no-LLM parity preflight
 against the corrected graph to verify that parent expansion reconstructs the
 same context from graph links and a flat paper-to-section index. A structural
 audit passing does **not** imply prompt/context parity or corpus completeness.
@@ -71,9 +74,10 @@ these per-question source files. **Nothing in this change recovers the missing
 historical predictions or simulates rerunning the model.** Do not generate
 "example results" that could be mistaken for measured model outputs.
 
-Newer work in PR #3 versions strict answer parsing and records corpus/sample
-fingerprints. Merge that work **before** generating a new confirmatory result.
-Keep parsing versions separate.
+Strict-v2 answer parsing and corpus/sample fingerprinting are now part
+of `main`. Use `--parser strict` for a new run, pin the code revision, and
+never mix its predictions with legacy-v1 scoring. For exact commands and a
+no-overwrite analysis flow, follow [CLEAN_RUN_CHECKLIST.md](CLEAN_RUN_CHECKLIST.md).
 
 ## Step 4 — Export a reviewer-verifiable package (stdlib only)
 
@@ -85,7 +89,7 @@ python scripts/evidence_bundle.py export \
 python scripts/evidence_bundle.py verify --bundle results/evidence
 ```
 
-For PR #6's optional experiment, point `--results-dir` at
+For the flat-parent experiment, point `--results-dir` at
 `results/parent_control` and `--out` at a distinct folder.
 
 The resulting bundle has a `manifest.json` and one `<arm>.jsonl` per arm.
