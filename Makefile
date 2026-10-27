@@ -40,6 +40,29 @@ benchmark:  ## Run all five arms: 4-arm ladder + graph_norr (needs ARANGO_PASS +
 compare:  ## Aggregate results into table, McNemar tests, and figure
 	python scripts/compare.py
 
+# Optional sixth arm is deliberately NOT included in the historical benchmark
+# or the published Holm family. Separate output directory avoids clobbering.
+.PHONY: check-parent-parity benchmark-parent-control compare-parent-control
+check-parent-parity:  ## Check full-abstract parity via Arango; NO LLM
+	python scripts/check_parent_parity.py --n 100 --seed 42
+
+benchmark-parent-control:  ## Optional fresh paired graph/flat runs; local Ollama
+	@export LLM_NUM_CTX=8192; \
+	python scripts/check_parent_parity.py --n 100 --seed 42 && \
+	for arm in graph flat_parent; do \
+		echo "===== $$arm (fresh parent control) ====="; \
+		python scripts/run_benchmark.py --arm $$arm --n 200 --output results/parent_control/$${arm}_results.json || exit 1; \
+	done; \
+	python scripts/compare_parent_baseline.py \
+		--flat results/parent_control/flat_parent_results.json \
+		--graph results/parent_control/graph_results.json \
+		--output results/parent_control/comparison.json
+
+compare-parent-control:  ## Compare fresh saved runs; no inference
+	python scripts/compare_parent_baseline.py \
+		--flat results/parent_control/flat_parent_results.json \
+		--graph results/parent_control/graph_results.json
+
 chat:  ## Launch the Gradio chat demo (needs ArangoDB + Ollama)
 	python app/chat_app.py
 

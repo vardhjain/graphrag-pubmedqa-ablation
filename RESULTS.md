@@ -68,6 +68,15 @@ HAS_CONTEXT relationships. A new [audit and evidence publication protocol](EVIDE
 can verify **future**, genuinely rerun model outputs. No synthetic results
 are substituted for missing historical predictions.
 
+**Important counterfactual not yet measured:** a new optional
+`flat_parent` arm reconstructs exactly the same parent abstracts via a flat
+chunk-to-paper index rather than `HAS_CONTEXT` graph traversal. Its purpose
+is to separate the benefit of **longer, more complete context** from any
+incremental benefit of a **graph structure**. No model responses or accuracy
+numbers for this arm have been generated or added to the published tables.
+See [PARENT_CONTROL.md](PARENT_CONTROL.md). The historical published graph
+also needs a clean deduplicated rerun before it is comparable to the control.
+
 **Majority-class baseline:** always answering "yes" scores **56.5%** on this
 seeded sample (113 yes / 68 no / 19 maybe). `plain`/`plain_rr` fall well below
 it; `graph` clears it by only +3.0 pp (Wilson 95% CI 52.6–66.1%, which
