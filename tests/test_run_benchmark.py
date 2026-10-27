@@ -142,3 +142,48 @@ def test_evaluator_roundtrip_through_saved_summary(tmp_path):
     assert back.ids == ["1", "2"] and back.latencies == [1.5, 2.5]
     assert back.degraded == [True, False] and back.truncated == [False, True]
     assert back.summary()["accuracy"] == ev.summary()["accuracy"]
+
+
+def test_build_meta_versions_parser_and_fingerprints_prompt():
+    from scripts.run_benchmark import build_meta
+
+    strict = build_meta("graph", 42, 200, parser="strict")
+    legacy = build_meta("graph", 42, 200, parser="legacy")
+    assert strict["protocol_version"] == 2
+    assert strict["answer_parser"] == "strict-v2"
+    assert legacy["answer_parser"] == "legacy-v1"
+    assert strict["prompt_sha256"] == legacy["prompt_sha256"]
+    assert len(strict["prompt_sha256"]) == 64
+    assert strict["embedding_model"] and strict["reranker_model"]
+
+
+def test_resume_refuses_parser_or_corpus_drift():
+    import pytest
+    from scripts.run_benchmark import build_meta, check_resume
+
+    expected = build_meta("graph", 42, 3)
+    expected["sample_sha256"] = "a" * 64
+    expected["corpus_sha256"] = "b" * 64
+    good = {"meta": dict(expected), "ids": ["a"]}
+    assert check_resume(good, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected) == ["a"]
+
+    for field, new_value in (
+        ("answer_parser", "legacy-v1"),
+        ("corpus_sha256", "other"),
+        ("num_ctx", 1),
+    ):
+        changed = {"meta": {**expected, field: new_value}, "ids": ["a"]}
+        with pytest.raises(ValueError, match=field):
+            check_resume(changed, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected)
+
+
+def test_resume_refuses_unversioned_checkpoint_on_new_run():
+    import pytest
+    from scripts.run_benchmark import build_meta, check_resume
+
+    expected = build_meta("graph", 42, 3)
+    expected["sample_sha256"] = "a" * 64
+    expected["corpus_sha256"] = "b" * 64
+    old = {"meta": {"arm": "graph", "seed": 42, "n_requested": 3}, "ids": ["a"]}
+    with pytest.raises(ValueError, match="protocol_version"):
+        check_resume(old, "graph", 42, 3, ["a", "b", "c"], expected_meta=expected)

@@ -344,7 +344,7 @@ accuracy is therefore unmeasured. **Fix:** include it in the next GPU run.
 
 ---
 
-## 17. `FuzzyEvaluator` known mis-scoring modes — MEDIUM (open, deliberate)
+## 17. `FuzzyEvaluator` known mis-scoring modes — FIXED FOR NEW RUNS (historical behavior retained)
 
 **What:** `extract_answer` takes the *first* yes/no/maybe match (a hedge like
 "no evidence… so yes" scores `no`), matches without `` word boundaries (e.g.

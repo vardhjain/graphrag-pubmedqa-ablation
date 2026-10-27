@@ -277,6 +277,85 @@ def test_compare_main_accepts_legacy_files_without_meta(tmp_path, monkeypatch):
     assert len(out["contrasts"]) == 1
 
 
+def _v2_meta(arm):
+    from scripts.run_benchmark import build_meta
+
+    meta = build_meta(arm, 42, 4, parser="strict")
+    meta.update(
+        sample_sha256="a" * 64,
+        corpus_sha256="b" * 64,
+        git_sha="example-commit",
+        complete=True,
+        n_done=4,
+    )
+    return meta
+
+
+def test_compare_rejects_mixed_parser_and_corpus_protocols():
+    from scripts.compare import check_runs
+
+    base = _v2_meta("plain")
+    changed_parser = {**_v2_meta("plain_rr"), "answer_parser": "legacy-v1"}
+    changed_corpus = {**_v2_meta("graph"), "corpus_sha256": "z" * 64}
+    arms = {
+        "plain": {"meta": base},
+        "plain_rr": {"meta": changed_parser},
+        "graph": {"meta": changed_corpus},
+        "graph_concepts": {"meta": {"seed": 42, "llm_model": "m", "n_requested": 4}},
+    }
+    excluded, warnings = check_runs(arms)
+    assert excluded == {"plain_rr", "graph", "graph_concepts"}
+    assert any("legacy metadata" in w for w in warnings)
+
+
+def test_compare_rejects_missing_v2_provenance():
+    from scripts.compare import check_runs
+
+    broken = _v2_meta("graph")
+    broken.pop("prompt_sha256")
+    excluded, warnings = check_runs({"graph": {"meta": broken}})
+    assert excluded == {"graph"}
+    assert any("prompt_sha256" in w for w in warnings)
+
+
+def test_compare_accepts_matching_v2_provenance():
+    from scripts.compare import check_runs
+
+    excluded, warnings = check_runs(
+        {
+            "plain": {"meta": _v2_meta("plain")},
+            "graph": {"meta": _v2_meta("graph")},
+        }
+    )
+    assert excluded == set()
+    assert warnings == []
+
+
+def test_pairing_rejects_inconsistent_labels_and_duplicate_ids():
+    import pytest
+
+    a = {"ids": [1], "y_true": ["yes"], "y_pred": ["yes"]}
+    bad_gold = {"ids": [1], "y_true": ["no"], "y_pred": ["no"]}
+    with pytest.raises(ValueError, match="Ground-truth"):
+        aligned(a, bad_gold)
+    duplicate = {"ids": [1, 1], "y_true": ["yes", "yes"], "y_pred": ["yes", "no"]}
+    with pytest.raises(ValueError, match="Duplicate"):
+        aligned(duplicate, bad_gold)
+
+
+def test_compare_records_invalid_outputs_separately(tmp_path, monkeypatch):
+    _write_arm(
+        tmp_path,
+        "plain",
+        ["invalid", "no", "yes", "no"],
+        TRUTH,
+        _meta("plain"),
+        n_invalid=1,
+    )
+    out = _run_main(tmp_path, monkeypatch)
+    assert out["arms"][0]["n_invalid"] == 1
+
+
 def test_compare_records_paired_n_after_failed_calls(tmp_path, monkeypatch):
     _write_arm(
         tmp_path,
