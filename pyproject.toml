@@ -36,6 +36,7 @@ where = ["src"]
 pythonpath = ["src", "."]
 testpaths = ["tests", "backend"]
 addopts = "-q"
+markers = ["integration: tests against disposable local ArangoDB and Neo4j instances"]
 
 [tool.coverage.run]
 source = ["kgqa", "graphrag"]
