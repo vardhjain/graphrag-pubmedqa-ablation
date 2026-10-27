@@ -33,7 +33,6 @@ jobs:
       - name: Lint (ruff)
         run: |
           ruff check src scripts tests app backend
-          ruff format --diff tests/test_results_integrity.py
           ruff format --check src scripts tests app backend
 
       - name: Benchmark artifact integrity
