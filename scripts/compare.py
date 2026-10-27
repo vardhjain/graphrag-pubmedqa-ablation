@@ -313,6 +313,7 @@ def main():
                 "a_name": a_name,
                 "b_name": b_name,
                 "desc": desc,
+                "paired_n": len(gt),
                 "delta_acc": (acc_b - acc_a) * 100,
                 "test": test,
             }
@@ -345,7 +346,7 @@ def main():
                 "delta_acc": round(d, 2),
                 "gains": test["b_gains"],
                 "losses": test["c_losses"],
-                "paired_n": len(aligned(results[r["a_name"]], results[r["b_name"]])[0]),
+                "paired_n": r["paired_n"],
                 # Full precision, not rounded to 4dp -- a real
                 # p~5.5e-6 must not collapse to the literal 0.0.
                 "p_value": test["p_value"],
