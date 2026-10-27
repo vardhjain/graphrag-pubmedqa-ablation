@@ -32,6 +32,7 @@ jobs:
 
       - name: Lint (ruff)
         run: |
+          ruff format --diff scripts/audit_graph.py scripts/evidence_bundle.py tests/test_audit_graph.py tests/test_evidence_bundle.py
           ruff check src scripts tests app backend
           ruff format --check src scripts tests app backend
 
